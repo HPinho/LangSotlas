@@ -1,7 +1,8 @@
-"""Sotlas CodegenLLVM — Gerador de LLVM IR a partir do SIR (Estágio 1).
+"""Sotlas CodegenLLVM — Gerador de LLVM IR com Suporte a Metadados DWARF.
 
 Este módulo transcreve o SIR (SSA) de Sotlas para LLVM IR textual (.ll),
-fornecendo a base para o backend nativo sem dependência de transcompilação C99.
+fornecendo a base para o backend nativo sem dependência de transcompilação C99
+e emitindo metadados de depuração DWARF (!DILocation, !DISubprogram, !DICompileUnit).
 """
 from __future__ import annotations
 from io import StringIO
@@ -53,17 +54,61 @@ def to_llvm_type(sotlas_type: Optional[str]) -> str:
 
 
 class CodegenLLVM:
-    """Emissor de LLVM IR textual para módulos SIR."""
+    """Emissor de LLVM IR textual para módulos SIR com suporte a DWARF."""
 
-    def __init__(self, sir_module: SIRModule, is_baremetal: bool = True) -> None:
+    def __init__(self, sir_module: SIRModule, is_baremetal: bool = True, emit_debug: bool = False) -> None:
         self._sir = sir_module
         self._is_baremetal = is_baremetal
+        self._emit_debug = emit_debug
         self._out = StringIO()
+        self._meta_id = 0
+        self._metadata_lines: List[str] = []
+
+    def _next_meta_id(self) -> int:
+        mid = self._meta_id
+        self._meta_id += 1
+        return mid
 
     def emit(self) -> str:
         self._emit_header()
+        fn_subprograms: Dict[str, int] = {}
+
+        if self._emit_debug:
+            cu_id = self._next_meta_id()       # !0: DICompileUnit
+            file_id = self._next_meta_id()     # !1: DIFile
+            dwarf_ver_id = self._next_meta_id()# !2: Dwarf Version
+            dbg_ver_id = self._next_meta_id()  # !3: Debug Info Version
+
+            self._metadata_lines.append(
+                f"!{file_id} = !DIFile(filename: \"{self._sir.name}.sotlas\", directory: \".\")"
+            )
+            self._metadata_lines.append(
+                f"!{cu_id} = distinct !DICompileUnit(language: DW_LANG_C99, file: !{file_id}, "
+                f"producer: \"Sotlas Compiler v0.3.0\", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)"
+            )
+            self._metadata_lines.append(f"!{dwarf_ver_id} = !{{i32 2, !\"Dwarf Version\", i32 4}}")
+            self._metadata_lines.append(f"!{dbg_ver_id} = !{{i32 2, !\"Debug Info Version\", i32 3}}")
+
+            for fn in self._sir.functions:
+                sub_id = self._next_meta_id()
+                sub_type_id = self._next_meta_id()
+                sub_types_arr_id = self._next_meta_id()
+                self._metadata_lines.append(f"!{sub_types_arr_id} = !{{null}}")
+                self._metadata_lines.append(f"!{sub_type_id} = !DISubroutineType(types: !{sub_types_arr_id})")
+                self._metadata_lines.append(
+                    f"!{sub_id} = distinct !DISubprogram(name: \"{fn.name}\", scope: !{file_id}, "
+                    f"file: !{file_id}, line: 1, type: !{sub_type_id}, isLocal: false, isDefinition: true, "
+                    f"scopeLine: 1, flags: DIFlagPrototyped, isOptimized: false, unit: !{cu_id})"
+                )
+                fn_subprograms[fn.name] = sub_id
+
         for fn in self._sir.functions:
-            self._emit_function(fn)
+            sub_id = fn_subprograms.get(fn.name)
+            self._emit_function(fn, sub_id)
+
+        if self._emit_debug:
+            self._emit_debug_metadata()
+
         return self._out.getvalue()
 
     def _emit_header(self) -> None:
@@ -75,37 +120,44 @@ class CodegenLLVM:
         else:
             self._out.write("target triple = \"x86_64-pc-none\"\n\n")
 
-    def _emit_function(self, fn: SIRFunction) -> None:
+    def _emit_function(self, fn: SIRFunction, subprogram_id: Optional[int] = None) -> None:
         ret_type = to_llvm_type(fn.return_type)
         params_str = ", ".join(f"{to_llvm_type(p.type_name)} %{p.name}" for p in fn.parameters)
-        self._out.write(f"define {ret_type} @{fn.name}({params_str}) #0 {{\n")
+        dbg_attr = f" !dbg !{subprogram_id}" if subprogram_id is not None else ""
+        self._out.write(f"define {ret_type} @{fn.name}({params_str}) #0{dbg_attr} {{\n")
+
+        loc_id = None
+        if subprogram_id is not None:
+            loc_id = self._next_meta_id()
+            self._metadata_lines.append(f"!{loc_id} = !DILocation(line: 1, column: 1, scope: !{subprogram_id})")
 
         for block in fn.blocks:
             lbl_str = str(block.label)
             label = f"bb{lbl_str}" if not lbl_str.startswith("bb") else lbl_str
             self._out.write(f"{label}:\n")
             for inst in block.instructions:
-                self._emit_instruction(inst)
+                self._emit_instruction(inst, loc_id)
 
         self._out.write("}\n\n")
 
-    def _emit_instruction(self, inst: SIRInstruction) -> None:
+    def _emit_instruction(self, inst: SIRInstruction, loc_id: Optional[int] = None) -> None:
+        dbg_suffix = f", !dbg !{loc_id}" if loc_id is not None else ""
         if isinstance(inst, AllocStackInst):
             llvm_type = to_llvm_type(inst.type_name)
-            self._out.write(f"  %{inst.result.name} = alloca {llvm_type}, align 8\n")
+            self._out.write(f"  %{inst.result.name} = alloca {llvm_type}, align 8{dbg_suffix}\n")
         elif isinstance(inst, StoreInst):
             src_type = to_llvm_type(inst.source.type_name)
-            self._out.write(f"  store {src_type} %{inst.source.name}, ptr %{inst.destination.name}, align 8\n")
+            self._out.write(f"  store {src_type} %{inst.source.name}, ptr %{inst.destination.name}, align 8{dbg_suffix}\n")
         elif isinstance(inst, LoadInst):
             res_type = to_llvm_type(inst.result.type_name)
-            self._out.write(f"  %{inst.result.name} = load {res_type}, ptr %{inst.source.name}, align 8\n")
+            self._out.write(f"  %{inst.result.name} = load {res_type}, ptr %{inst.source.name}, align 8{dbg_suffix}\n")
         elif isinstance(inst, CallInst):
             res_type = to_llvm_type(inst.result.type_name) if inst.result else "void"
             args_str = ", ".join(f"{to_llvm_type(a.type_name)} %{a.name}" for a in inst.arguments)
             if inst.result:
-                self._out.write(f"  %{inst.result.name} = call {res_type} @{inst.callee}({args_str})\n")
+                self._out.write(f"  %{inst.result.name} = call {res_type} @{inst.callee}({args_str}){dbg_suffix}\n")
             else:
-                self._out.write(f"  call {res_type} @{inst.callee}({args_str})\n")
+                self._out.write(f"  call {res_type} @{inst.callee}({args_str}){dbg_suffix}\n")
         elif isinstance(inst, RetainInst):
             self._out.write(f"  ; arc retain %{inst.value.name}\n")
         elif isinstance(inst, ReleaseInst):
@@ -123,8 +175,16 @@ class CodegenLLVM:
         elif isinstance(inst, ReturnInst):
             if inst.value:
                 val_type = to_llvm_type(inst.value.type_name)
-                self._out.write(f"  ret {val_type} %{inst.value.name}\n")
+                self._out.write(f"  ret {val_type} %{inst.value.name}{dbg_suffix}\n")
             else:
-                self._out.write("  ret void\n")
+                self._out.write(f"  ret void{dbg_suffix}\n")
         elif isinstance(inst, SystemOpInst):
             self._out.write(f"  ; system_op #{inst.operation}\n")
+
+    def _emit_debug_metadata(self) -> None:
+        self._out.write("; --- Metadados de Depuração DWARF ---\n")
+        self._out.write("!llvm.dbg.cu = !{!0}\n")
+        self._out.write("!llvm.module.flags = !{!2, !3}\n")
+        for line in self._metadata_lines:
+            self._out.write(f"{line}\n")
+        self._out.write("\n")

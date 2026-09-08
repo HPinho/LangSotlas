@@ -1,0 +1,68 @@
+module foundation::file;
+
+pub enum FileMode {
+    ReadOnly,
+    WriteOnly,
+    ReadWrite,
+    Append
+}
+
+pub struct FileHandle {
+    pub fd: i32;
+    pub is_open: bool;
+    pub mode: FileMode;
+}
+
+// Abstração de I/O de arquivo para ambientes hospedados (Hosted OS)
+pub class File {
+    handle: FileHandle;
+
+    pub fn new() -> File {
+        let mut f: File = 0;
+        f.handle = FileHandle {
+            fd: -1,
+            is_open: false,
+            mode: FileMode::ReadOnly
+        };
+        return f;
+    }
+
+    pub fn from_raw_fd(fd: i32, mode: FileMode) -> File {
+        let mut f: File = 0;
+        f.handle = FileHandle {
+            fd: fd,
+            is_open: fd >= 0,
+            mode: mode
+        };
+        return f;
+    }
+
+    pub fn is_open(self: *const File) -> bool {
+        if self == null {
+            return false;
+        }
+        unsafe {
+            return self.handle.is_open;
+        }
+    }
+
+    pub fn raw_descriptor(self: *const File) -> i32 {
+        if self == null {
+            return -1;
+        }
+        unsafe {
+            return self.handle.fd;
+        }
+    }
+
+    pub fn close(self: *mut File) {
+        if self != null {
+            unsafe {
+                if self.handle.is_open {
+                    self.handle.is_open = false;
+                    self.handle.fd = -1;
+                }
+            }
+        }
+    }
+}

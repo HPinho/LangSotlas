@@ -2,7 +2,7 @@
   "name": "baken-sotlas",
   "displayName": "Sotlas Language",
   "publisher": "bakenos",
-  "description": "Realce de sintaxe, snippets e suporte à linguagem de sistemas Sotlas do Baken OS (.sotlas)",
+  "description": "Suporte oficial à linguagem Sotlas: realce de sintaxe, LSP, diagnósticos e comandos de compilação",
   "version": "0.3.0",
   "icon": "./icons/sotlas-icon.svg",
   "engines": {
@@ -12,6 +12,16 @@
     "Programming Languages"
   ],
   "keywords": ["sotlas", "baken", "systems", "kernel", "language"],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:sotlas"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
   "contributes": {
     "languages": [
       {
@@ -45,6 +55,43 @@
         "label": "Sotlas File Icons",
         "path": "./icons/sotlas-icon-theme.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "sotlas.build",
+        "title": "Sotlas: Compilar Pacote Atual"
+      },
+      {
+        "command": "sotlas.check",
+        "title": "Sotlas: Verificar Tipos e Sintaxe"
+      },
+      {
+        "command": "sotlas.format",
+        "title": "Sotlas: Formatar Arquivo Atual"
+      },
+      {
+        "command": "sotlas.restartServer",
+        "title": "Sotlas: Reiniciar Servidor de Linguagem (LSP)"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Sotlas Configuration",
+      "properties": {
+        "sotlas.compilerPath": {
+          "type": "string",
+          "default": "sotlas",
+          "description": "Caminho para o binário ou comando executável do compilador Sotlas"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.7",
+    "@types/vscode": "^1.60.0",
+    "typescript": "^4.5.4"
   }
 }

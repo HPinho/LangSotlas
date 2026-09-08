@@ -6,6 +6,14 @@ Uso:
     sotlas run     arquivo.sotlas
     sotlas dump-ast arquivo.sotlas
     sotlas dump-sir arquivo.sotlas
+    sotlas dump-llvm arquivo.sotlas [--debug]
+    sotlas fmt     arquivo.sotlas [--check]
+    sotlas lint    arquivo.sotlas
+    sotlas doc     arquivo.sotlas [-o saída.md]
+    sotlas new     meu_projeto [--lib]
+    sotlas init    [--lib]
+    sotlas build   [--path .]
+    sotlas add     dependencia [--version "^0.1.0"]
     sotlas lsp     [--stdio]
     sotlas test    [--pattern PATTERN]
     sotlas version
@@ -74,6 +82,39 @@ def main() -> int:
     # Subcomando: dump-llvm
     dllvm = sub.add_parser("dump-llvm", help="Emite código intermediário LLVM IR (.ll) a partir do SIR")
     dllvm.add_argument("source", help=f"Arquivo fonte {SOTLAS_EXT}")
+    dllvm.add_argument("--debug", action="store_true", help="Emite metadados de depuração DWARF")
+
+    # Subcomando: fmt
+    fmt_p = sub.add_parser("fmt", help="Formata arquivos de código-fonte Sotlas")
+    fmt_p.add_argument("target", help="Arquivo ou diretório a formatar")
+    fmt_p.add_argument("--check", action="store_true", help="Apenas verifica a formatação sem alterar arquivos")
+
+    # Subcomando: lint
+    lint_p = sub.add_parser("lint", help="Executa o linter de boas práticas e segurança")
+    lint_p.add_argument("target", help="Arquivo ou diretório a analisar")
+
+    # Subcomando: doc
+    doc_p = sub.add_parser("doc", help="Gera documentação Markdown a partir de comentários '///'")
+    doc_p.add_argument("target", help="Arquivo fonte .sotlas")
+    doc_p.add_argument("-o", "--output", default=None, help="Arquivo de saída Markdown")
+
+    # Subcomando: new
+    new_p = sub.add_parser("new", help="Cria um novo projeto Sotlas com Sotlas.toml")
+    new_p.add_argument("name", help="Nome do projeto")
+    new_p.add_argument("--lib", action="store_true", help="Cria uma biblioteca em vez de binário executável")
+
+    # Subcomando: init
+    init_p = sub.add_parser("init", help="Inicializa um pacote Sotlas no diretório atual")
+    init_p.add_argument("--lib", action="store_true", help="Inicializa como biblioteca")
+
+    # Subcomando: build
+    build_p = sub.add_parser("build", help="Compila um pacote Sotlas lendo o Sotlas.toml")
+    build_p.add_argument("--path", default=".", help="Diretório do projeto (padrão: .)")
+
+    # Subcomando: add
+    add_p = sub.add_parser("add", help="Adiciona uma dependência ao Sotlas.toml")
+    add_p.add_argument("dependency", help="Nome da dependência")
+    add_p.add_argument("--version", default="^0.1.0", help="Especificação de versão (padrão: ^0.1.0)")
 
     # Subcomando: lsp
     lsp_p = sub.add_parser("lsp", help="Inicia o servidor de linguagem (Language Server Protocol)")
@@ -102,7 +143,21 @@ def main() -> int:
     if args.cmd == "dump-sir":
         return _run_dump_sir(args.source)
     if args.cmd == "dump-llvm":
-        return _run_dump_llvm(args.source)
+        return _run_dump_llvm(args.source, emit_debug=args.debug)
+    if args.cmd == "fmt":
+        return _run_fmt(args)
+    if args.cmd == "lint":
+        return _run_lint(args.target)
+    if args.cmd == "doc":
+        return _run_doc(args)
+    if args.cmd == "new":
+        return _run_new(args)
+    if args.cmd == "init":
+        return _run_init(args)
+    if args.cmd == "build":
+        return _run_build(args)
+    if args.cmd == "add":
+        return _run_add(args)
     if args.cmd == "lsp":
         return _run_lsp()
     if args.cmd == "test":
@@ -175,7 +230,7 @@ def _run_dump_sir(source_path: str) -> int:
     return 0
 
 
-def _run_dump_llvm(source_path: str) -> int:
+def _run_dump_llvm(source_path: str, emit_debug: bool = False) -> int:
     loaded = _read_source(source_path)
     if loaded is None:
         return 1
@@ -185,13 +240,81 @@ def _run_dump_llvm(source_path: str) -> int:
         module = production_frontend.parse(text, filename=source_path)
         gen = SIRGenerator()
         sir_mod = gen.generate_from_ast(module)
-        llvm_ir = CodegenLLVM(sir_mod).emit()
+        llvm_ir = CodegenLLVM(sir_mod, emit_debug=emit_debug).emit()
         print(llvm_ir)
     except Exception as error:
         print(f"sotlas: erro ao emitir LLVM IR: {error}", file=sys.stderr)
         return 1
     return 0
 
+
+def _run_fmt(args) -> int:
+    target = Path(args.target)
+    from sotlas.formatter import format_file
+    if target.is_file():
+        ok = format_file(target, check_only=args.check)
+        return 0 if ok else 1
+    elif target.is_dir():
+        all_ok = True
+        for p in target.glob("**/*.sotlas"):
+            if not format_file(p, check_only=args.check):
+                all_ok = False
+        return 0 if all_ok else 1
+    else:
+        print(f"sotlas fmt: caminho não encontrado: {target}", file=sys.stderr)
+        return 1
+
+
+def _run_lint(target_path: str) -> int:
+    target = Path(target_path)
+    from sotlas.linter import lint_file
+    if target.is_file():
+        return lint_file(target)
+    elif target.is_dir():
+        ret = 0
+        for p in target.glob("**/*.sotlas"):
+            if lint_file(p) != 0:
+                ret = 1
+        return ret
+    else:
+        print(f"sotlas lint: caminho não encontrado: {target}", file=sys.stderr)
+        return 1
+
+
+def _run_doc(args) -> int:
+    target = Path(args.target)
+    from sotlas.docgen import docgen_file
+    out_file = Path(args.output) if args.output else None
+    return docgen_file(target, out_file)
+
+
+def _run_new(args) -> int:
+    from sotlas.package_manager import init_package
+    target_dir = Path(args.name)
+    init_package(target_dir, args.name, is_lib=args.lib)
+    print(f"sotlas: novo pacote '{args.name}' criado com sucesso em {target_dir}")
+    return 0
+
+
+def _run_init(args) -> int:
+    from sotlas.package_manager import init_package
+    target_dir = Path.cwd()
+    name = target_dir.name
+    init_package(target_dir, name, is_lib=args.lib)
+    print(f"sotlas: pacote '{name}' inicializado com sucesso em {target_dir}")
+    return 0
+
+
+def _run_build(args) -> int:
+    from sotlas.package_manager import build_package
+    target_dir = Path(args.path)
+    return build_package(target_dir)
+
+
+def _run_add(args) -> int:
+    from sotlas.package_manager import add_dependency
+    target_dir = Path.cwd()
+    return add_dependency(target_dir, args.dependency, dep_spec=args.version)
 
 
 def _run_compile(args) -> int:

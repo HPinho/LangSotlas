@@ -1,0 +1,106 @@
+module foundation::string_buf;
+
+pub struct ByteSlice {
+    pub data: *const u8;
+    pub length: usize;
+}
+
+// Buffer dinâmico de strings UTF-8
+pub class StringBuf {
+    buffer: *mut u8;
+    length: usize;
+    capacity: usize;
+
+    pub fn new(backing_memory: *mut u8, cap: usize) -> StringBuf {
+        let mut sb: StringBuf = 0;
+        sb.buffer = backing_memory;
+        sb.length = 0;
+        sb.capacity = cap;
+        return sb;
+    }
+
+    pub fn len(self: *const StringBuf) -> usize {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return self.length;
+        }
+    }
+
+    pub fn cap(self: *const StringBuf) -> usize {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return self.capacity;
+        }
+    }
+
+    pub fn is_empty(self: *const StringBuf) -> bool {
+        if self == null {
+            return true;
+        }
+        unsafe {
+            return self.length == 0;
+        }
+    }
+
+    pub fn append_char(self: *mut StringBuf, ch: u8) -> bool {
+        if self == null {
+            return false;
+        }
+        unsafe {
+            if self.buffer == null || self.length >= self.capacity {
+                return false;
+            }
+            let target: *mut u8 = self.buffer + self.length;
+            *target = ch;
+            self.length = self.length + 1;
+            return true;
+        }
+    }
+
+    pub fn append_str(self: *mut StringBuf, src: *const u8, src_len: usize) -> bool {
+        if self == null || src == null {
+            return false;
+        }
+        unsafe {
+            if self.buffer == null || self.length + src_len > self.capacity {
+                return false;
+            }
+            let mut i: usize = 0;
+            while i < src_len {
+                let ch: u8 = *(src + i);
+                let target: *mut u8 = self.buffer + self.length + i;
+                *target = ch;
+                i = i + 1;
+            }
+            self.length = self.length + src_len;
+            return true;
+        }
+    }
+
+    pub fn as_slice(self: *const StringBuf) -> ByteSlice {
+        if self == null {
+            return ByteSlice { data: null, length: 0 };
+        }
+        unsafe {
+            if self.buffer == null {
+                return ByteSlice { data: null, length: 0 };
+            }
+            return ByteSlice {
+                data: self.buffer as *const u8,
+                length: self.length
+            };
+        }
+    }
+
+    pub fn clear(self: *mut StringBuf) {
+        if self != null {
+            unsafe {
+                self.length = 0;
+            }
+        }
+    }
+}

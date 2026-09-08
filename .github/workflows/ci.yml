@@ -1,10 +1,13 @@
-name: Sotlas CI
+name: Sotlas CI & Toolchain Build Farm
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  schedule:
+    # Builds noturnos diários às 02:00 UTC (estilo ci.swift.org)
+    - cron: '0 2 * * *'
 
 jobs:
   test:
@@ -30,11 +33,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e .
 
-    - name: Run Sotlas test suite
+    - name: Run Sotlas test suite (100% PASS)
       run: |
         python -m unittest discover -s tests -p "test_*.py"
 
-    - name: Verify CLI tools
+    - name: Verify CLI tools & Subcommands
       run: |
         sotlas version
         sotlas check examples/01_hello_systems/main.sotlas
@@ -43,3 +46,54 @@ jobs:
         sotlas check examples/04_raw_memory_and_unsafe/main.sotlas
         sotlas dump-ast examples/01_hello_systems/main.sotlas
         sotlas dump-sir examples/01_hello_systems/main.sotlas
+        sotlas dump-llvm examples/01_hello_systems/main.sotlas --debug
+        sotlas fmt examples/01_hello_systems/main.sotlas --check
+        sotlas lint examples/01_hello_systems/main.sotlas
+        sotlas doc examples/01_hello_systems/main.sotlas -o examples/01_hello_systems/DOCS.md
+
+  kernel-smoke-test:
+    name: BakenOS Kernel Integration Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      run: |
+        pip install -e .
+
+    - name: Run Kernel Contract & Resolver Tests
+      run: |
+        python -m unittest tests.test_sotlas_kernel_language_contract
+        python -m unittest tests.test_sotlas_resolver
+
+  package-toolchain-snapshot:
+    name: Package Nightly Toolchain Snapshot
+    runs-on: ubuntu-latest
+    needs: [test, kernel-smoke-test]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Prepare Toolchain Bundle
+      run: |
+        mkdir -p dist/sotlas-toolchain
+        cp -r compiler tools stdlib runtime include editors examples dist/sotlas-toolchain/
+        cp README.md LICENSE pyproject.toml setup.py dist/sotlas-toolchain/
+        tar -czf dist/sotlas-toolchain-nightly.tar.gz -C dist sotlas-toolchain
+
+    - name: Upload Toolchain Snapshot Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sotlas-toolchain-nightly
+        path: dist/sotlas-toolchain-nightly.tar.gz

@@ -1,0 +1,120 @@
+module foundation::vec;
+
+pub struct OptionU32 {
+    pub has_value: bool;
+    pub value: u32;
+}
+
+// Vetor dinâmico redimensionável de inteiros u32 (Vec<u32>)
+pub class VecU32 {
+    data: *mut u32;
+    length: usize;
+    cap: usize;
+
+    pub fn new() -> VecU32 {
+        let mut v: VecU32 = 0;
+        v.data = null;
+        v.length = 0;
+        v.cap = 0;
+        return v;
+    }
+
+    pub fn with_capacity(initial_cap: usize, backing_memory: *mut u32) -> VecU32 {
+        let mut v: VecU32 = 0;
+        v.data = backing_memory;
+        v.length = 0;
+        v.cap = initial_cap;
+        return v;
+    }
+
+    pub fn len(self: *const VecU32) -> usize {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return self.length;
+        }
+    }
+
+    pub fn capacity(self: *const VecU32) -> usize {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return self.cap;
+        }
+    }
+
+    pub fn is_empty(self: *const VecU32) -> bool {
+        if self == null {
+            return true;
+        }
+        unsafe {
+            return self.length == 0;
+        }
+    }
+
+    pub fn push(self: *mut VecU32, value: u32) -> bool {
+        if self == null {
+            return false;
+        }
+        unsafe {
+            if self.data == null || self.length >= self.cap {
+                return false;
+            }
+            let target: *mut u32 = self.data + self.length;
+            *target = value;
+            self.length = self.length + 1;
+            return true;
+        }
+    }
+
+    pub fn pop(self: *mut VecU32) -> OptionU32 {
+        if self == null {
+            return OptionU32 { has_value: false, value: 0 };
+        }
+        unsafe {
+            if self.length == 0 || self.data == null {
+                return OptionU32 { has_value: false, value: 0 };
+            }
+            self.length = self.length - 1;
+            let val: u32 = *(self.data + self.length);
+            return OptionU32 { has_value: true, value: val };
+        }
+    }
+
+    pub fn get(self: *const VecU32, index: usize) -> OptionU32 {
+        if self == null {
+            return OptionU32 { has_value: false, value: 0 };
+        }
+        unsafe {
+            if index >= self.length || self.data == null {
+                return OptionU32 { has_value: false, value: 0 };
+            }
+            let val: u32 = *(self.data + index);
+            return OptionU32 { has_value: true, value: val };
+        }
+    }
+
+    pub fn set(self: *mut VecU32, index: usize, value: u32) -> bool {
+        if self == null {
+            return false;
+        }
+        unsafe {
+            if index >= self.length || self.data == null {
+                return false;
+            }
+            let target: *mut u32 = self.data + index;
+            *target = value;
+            return true;
+        }
+    }
+
+    pub fn clear(self: *mut VecU32) {
+        if self != null {
+            unsafe {
+                self.length = 0;
+            }
+        }
+    }
+}

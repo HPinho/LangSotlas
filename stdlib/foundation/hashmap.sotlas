@@ -1,0 +1,144 @@
+module foundation::hashmap;
+
+pub struct OptionU32 {
+    pub has_value: bool;
+    pub value: u32;
+}
+
+pub struct HashEntry {
+    pub key: u64;
+    pub value: u64;
+    pub is_occupied: bool;
+}
+
+// Tabela Hash linear de sondagem aberta com chaves de 64 bits
+pub class HashMapU64 {
+    entries: *mut HashEntry;
+    capacity: usize;
+    count: usize;
+
+    pub fn new(backing_entries: *mut HashEntry, cap: usize) -> HashMapU64 {
+        let mut hm: HashMapU64 = 0;
+        hm.entries = backing_entries;
+        hm.capacity = cap;
+        hm.count = 0;
+
+        if backing_entries != null {
+            let mut i: usize = 0;
+            while i < cap {
+                unsafe {
+                    let entry: *mut HashEntry = backing_entries + i;
+                    entry.is_occupied = false;
+                    entry.key = 0;
+                    entry.value = 0;
+                }
+                i = i + 1;
+            }
+        }
+
+        return hm;
+    }
+
+    pub fn len(self: *const HashMapU64) -> usize {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return self.count;
+        }
+    }
+
+    pub fn cap(self: *const HashMapU64) -> usize {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return self.capacity;
+        }
+    }
+
+    // Algoritmo de hash FNV-1a de 64 bits
+    pub fn hash_key(key: u64) -> u64 {
+        let mut h: u64 = 14695981039346656037;
+        let mut k: u64 = key;
+        let mut i: usize = 0;
+        while i < 8 {
+            let byte_val: u64 = k & 0xFF;
+            h = (h ^ byte_val) * 1099511628211;
+            k = k >> 8;
+            i = i + 1;
+        }
+        return h;
+    }
+
+    pub fn insert(self: *mut HashMapU64, key: u64, value: u64) -> bool {
+        if self == null {
+            return false;
+        }
+
+        unsafe {
+            if self.entries == null || self.count >= self.capacity {
+                return false;
+            }
+
+            let hash_val: u64 = HashMapU64::hash_key(key);
+            let mut index: usize = (hash_val % (self.capacity as u64)) as usize;
+            let mut attempts: usize = 0;
+
+            while attempts < self.capacity {
+                let entry: *mut HashEntry = self.entries + index;
+                if !entry.is_occupied || entry.key == key {
+                    if !entry.is_occupied {
+                        self.count = self.count + 1;
+                    }
+                    entry.is_occupied = true;
+                    entry.key = key;
+                    entry.value = value;
+                    return true;
+                }
+                index = (index + 1) % self.capacity;
+                attempts = attempts + 1;
+            }
+            return false;
+        }
+    }
+
+    pub fn get(self: *const HashMapU64, key: u64) -> OptionU32 {
+        if self == null {
+            return OptionU32 { has_value: false, value: 0 };
+        }
+
+        unsafe {
+            if self.entries == null || self.count == 0 {
+                return OptionU32 { has_value: false, value: 0 };
+            }
+
+            let hash_val: u64 = HashMapU64::hash_key(key);
+            let mut index: usize = (hash_val % (self.capacity as u64)) as usize;
+            let mut attempts: usize = 0;
+
+            while attempts < self.capacity {
+                let entry: *const HashEntry = self.entries + index;
+                if !entry.is_occupied {
+                    return OptionU32 { has_value: false, value: 0 };
+                }
+                if entry.key == key {
+                    return OptionU32 { has_value: true, value: entry.value as u32 };
+                }
+                index = (index + 1) % self.capacity;
+                attempts = attempts + 1;
+            }
+            return OptionU32 { has_value: false, value: 0 };
+        }
+    }
+
+    pub fn contains_key(self: *const HashMapU64, key: u64) -> bool {
+        if self == null {
+            return false;
+        }
+        unsafe {
+            let opt: OptionU32 = self.get(key);
+            return opt.has_value;
+        }
+    }
+}
