@@ -1,0 +1,36 @@
+module examples::safe_structures;
+
+pub struct Point2D {
+    pub x: i32;
+    pub y: i32;
+}
+
+pub class Vector2D {
+    x: i32;
+    y: i32;
+
+    pub fn new(vx: i32, vy: i32) -> Vector2D {
+        let mut v: Vector2D = 0;
+        v.x = vx;
+        v.y = vy;
+        return v;
+    }
+
+    pub fn length_squared(self: *const Vector2D) -> i32 {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return (self.x * self.x) + (self.y * self.y);
+        }
+    }
+}
+
+pub fn main() -> i32 {
+    let pt: Point2D = Point2D { x: 3, y: 4 };
+    let vec: Vector2D = Vector2D::new(pt.x, pt.y);
+    if vec.length_squared() == 25 {
+        return 0;
+    }
+    return 1;
+}

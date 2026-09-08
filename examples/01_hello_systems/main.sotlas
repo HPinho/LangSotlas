@@ -1,0 +1,21 @@
+module examples::hello_systems;
+
+// Função pura de cálculo safe
+pub fn compute_factorial(n: u32) -> u32 {
+    let mut result: u32 = 1;
+    let mut i: u32 = 1;
+    while i <= n {
+        result = result * i;
+        i = i + 1;
+    }
+    return result;
+}
+
+// Ponto de entrada padrão
+pub fn main() -> i32 {
+    let fact: u32 = compute_factorial(5);
+    if fact == 120 {
+        return 0;
+    }
+    return 1;
+}

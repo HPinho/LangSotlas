@@ -1,0 +1,49 @@
+module core::slice;
+import core::mem::*;
+
+pub struct ByteSlice {
+    ptr: *const u8;
+    len: usize;
+}
+
+pub struct MutByteSlice {
+    ptr: *mut u8;
+    len: usize;
+}
+
+pub fn byte_slice_make(ptr: *const u8, len: usize) -> ByteSlice {
+    let mut s: ByteSlice = 0;
+    s.ptr = ptr;
+    s.len = len;
+    return s;
+}
+
+pub fn mut_byte_slice_make(ptr: *mut u8, len: usize) -> MutByteSlice {
+    let mut s: MutByteSlice = 0;
+    s.ptr = ptr;
+    s.len = len;
+    return s;
+}
+
+pub fn byte_slice_is_empty(s: ByteSlice) -> bool {
+    return s.len == 0 || s.ptr == null;
+}
+
+pub fn byte_slice_get(s: ByteSlice, index: usize) -> u8 {
+    if index >= s.len || s.ptr == null {
+        return 0;
+    }
+    unsafe {
+        return s.ptr[index];
+    }
+}
+
+pub fn mut_byte_slice_set(s: MutByteSlice, index: usize, val: u8) -> bool {
+    if index >= s.len || s.ptr == null {
+        return false;
+    }
+    unsafe {
+        s.ptr[index] = val;
+        return true;
+    }
+}

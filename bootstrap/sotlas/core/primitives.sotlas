@@ -1,0 +1,64 @@
+module core::primitives;
+
+// Constantes e limites de tipos inteiros fundamentais
+pub const I8_MIN: i8 = -128;
+pub const I8_MAX: i8 = 127;
+pub const U8_MAX: u8 = 255;
+
+pub const I16_MIN: i16 = -32768;
+pub const I16_MAX: i16 = 32767;
+pub const U16_MAX: u16 = 65535;
+
+pub const I32_MIN: i32 = -2147483648;
+pub const I32_MAX: i32 = 2147483647;
+pub const U32_MAX: u32 = 4294967295;
+
+pub const I64_MIN: i64 = -9223372036854775808;
+pub const I64_MAX: i64 = 9223372036854775807;
+pub const U64_MAX: u64 = 18446744073709551615;
+
+// Utilitários de conversão e comparação de inteiros
+pub fn min_u32(a: u32, b: u32) -> u32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+pub fn max_u32(a: u32, b: u32) -> u32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+pub fn clamp_u32(val: u32, min_val: u32, max_val: u32) -> u32 {
+    if val < min_val {
+        return min_val;
+    }
+    if val > max_val {
+        return max_val;
+    }
+    return val;
+}
+
+pub fn min_i32(a: i32, b: i32) -> i32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+pub fn max_i32(a: i32, b: i32) -> i32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+pub fn abs_i32(val: i32) -> i32 {
+    if val < 0 {
+        return -val;
+    }
+    return val;
+}

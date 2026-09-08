@@ -1,0 +1,50 @@
+{
+  "name": "baken-sotlas",
+  "displayName": "Sotlas Language",
+  "publisher": "bakenos",
+  "description": "Realce de sintaxe, snippets e suporte à linguagem de sistemas Sotlas do Baken OS (.sotlas)",
+  "version": "0.3.0",
+  "icon": "./icons/sotlas-icon.svg",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": ["sotlas", "baken", "systems", "kernel", "language"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "sotlas",
+        "aliases": [
+          "Sotlas",
+          "Baken Sotlas",
+          "sotlas"
+        ],
+        "extensions": [
+          ".sotlas",
+          ".sth"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/sotlas-icon.svg",
+          "dark": "./icons/sotlas-logo.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sotlas",
+        "scopeName": "source.sotlas",
+        "path": "./syntaxes/sotlas.tmLanguage.json"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "sotlas-icons",
+        "label": "Sotlas File Icons",
+        "path": "./icons/sotlas-icon-theme.json"
+      }
+    ]
+  }
+}

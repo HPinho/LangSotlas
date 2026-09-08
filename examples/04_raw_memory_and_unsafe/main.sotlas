@@ -1,0 +1,33 @@
+module examples::raw_memory;
+
+static mut BUFFER: [u8; 16] = [0; 16];
+
+pub fn write_payload(offset: usize, value: u8) -> bool {
+    if offset >= 16 {
+        return false;
+    }
+    unsafe {
+        BUFFER[offset] = value;
+    }
+    return true;
+}
+
+pub fn read_payload(offset: usize) -> u8 {
+    if offset >= 16 {
+        return 0;
+    }
+    unsafe {
+        return BUFFER[offset];
+    }
+}
+
+pub fn main() -> i32 {
+    let ok: bool = write_payload(3, 255);
+    if !ok {
+        return 1;
+    }
+    if read_payload(3) == 255 {
+        return 0;
+    }
+    return 2;
+}

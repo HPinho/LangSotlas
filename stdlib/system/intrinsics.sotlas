@@ -1,0 +1,79 @@
+module system::intrinsics;
+
+// Port I/O x86_64
+@system
+pub fn inb(port: u16) -> u8 {
+    let mut val: u8 = 0;
+    unsafe {
+        __asm__ volatile ("inb %1, %0" : "=a"(val) : "Nd"(port));
+    }
+    return val;
+}
+
+@system
+pub fn outb(port: u16, val: u8) {
+    unsafe {
+        __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
+    }
+}
+
+@system
+pub fn inw(port: u16) -> u16 {
+    let mut val: u16 = 0;
+    unsafe {
+        __asm__ volatile ("inw %1, %0" : "=a"(val) : "Nd"(port));
+    }
+    return val;
+}
+
+@system
+pub fn outw(port: u16, val: u16) {
+    unsafe {
+        __asm__ volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
+    }
+}
+
+@system
+pub fn inl(port: u16) -> u32 {
+    let mut val: u32 = 0;
+    unsafe {
+        __asm__ volatile ("inl %1, %0" : "=a"(val) : "Nd"(port));
+    }
+    return val;
+}
+
+@system
+pub fn outl(port: u16, val: u32) {
+    unsafe {
+        __asm__ volatile ("outl %0, %1" : : "a"(val), "Nd"(port));
+    }
+}
+
+// Controle de interrupções e CPU
+@system
+pub fn cli() {
+    unsafe {
+        __asm__ volatile ("cli" : : : "memory");
+    }
+}
+
+@system
+pub fn sti() {
+    unsafe {
+        __asm__ volatile ("sti" : : : "memory");
+    }
+}
+
+@system
+pub fn hlt() {
+    unsafe {
+        __asm__ volatile ("hlt");
+    }
+}
+
+@system
+pub fn memory_barrier() {
+    unsafe {
+        __asm__ volatile ("" : : : "memory");
+    }
+}

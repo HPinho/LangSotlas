@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sotlas"
+version = "0.2.0"
+description = "Sotlas Programming Language — Safe by default, unapologetically systems-capable"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Equipe Sotlas", email = "dev@bakenos.org" }
+]
+keywords = ["compiler", "systems-programming", "operating-systems", "freestanding", "memory-safety", "type-safety"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Compilers",
+    "Topic :: Operating System :: OS Independent",
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+sotlas = "sotlas.cli:main"
+sotlasc = "sotlas.cli:main"
+sotlas-lsp = "sotlas_compile.lsp:main"
+
+[tool.setuptools]
+package-dir = {"" = "compiler"}
+
+[tool.setuptools.packages.find]
+where = ["compiler"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

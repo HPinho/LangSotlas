@@ -1,0 +1,25 @@
+module examples::systems_intrinsics;
+
+static mut SYSTEM_STATUS: u32 = 0;
+
+@system
+pub fn update_system_status(code: u32) {
+    unsafe {
+        SYSTEM_STATUS = code;
+    }
+}
+
+@system
+pub fn read_system_status() -> u32 {
+    unsafe {
+        return SYSTEM_STATUS;
+    }
+}
+
+pub fn main() -> i32 {
+    update_system_status(42);
+    if read_system_status() == 42 {
+        return 0;
+    }
+    return 1;
+}

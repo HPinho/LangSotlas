@@ -1,0 +1,52 @@
+module core::string;
+
+pub struct StringSlice {
+    data: *const u8;
+    length: usize;
+}
+
+pub fn string_from_raw(data: *const u8, len: usize) -> StringSlice {
+    let mut s: StringSlice = 0;
+    s.data = data;
+    s.length = len;
+    return s;
+}
+
+pub fn string_len(s: StringSlice) -> usize {
+    return s.length;
+}
+
+pub fn string_is_empty(s: StringSlice) -> bool {
+    return s.length == 0 || s.data == null;
+}
+
+pub fn string_char_at(s: StringSlice, index: usize) -> u8 {
+    if index >= s.length || s.data == null {
+        return 0;
+    }
+    unsafe {
+        return s.data[index];
+    }
+}
+
+pub fn string_equals(a: StringSlice, b: StringSlice) -> bool {
+    if a.length != b.length {
+        return false;
+    }
+    if a.length == 0 {
+        return true;
+    }
+    if a.data == null || b.data == null {
+        return false;
+    }
+    let mut i: usize = 0;
+    unsafe {
+        while i < a.length {
+            if a.data[i] != b.data[i] {
+                return false;
+            }
+            i = i + 1;
+        }
+    }
+    return true;
+}
