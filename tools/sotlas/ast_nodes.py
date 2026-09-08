@@ -416,11 +416,48 @@ class DeferNode:
     body: Optional[List["StmtNode"]] = None
 
 
+@dataclass
+class DiscernCaseNode:
+    span: Span
+    pattern: MatchPatternNode
+    guard: Optional[ExprNode]
+    body: List["StmtNode"]
+
+
+@dataclass
+class DiscernStmtNode:
+    span: Span
+    subject: ExprNode
+    cases: List[DiscernCaseNode]
+    default_case: Optional[List["StmtNode"]] = None
+
+
+@dataclass
+class ProbeStmtNode:
+    span: Span
+    condition: ExprNode
+    message: Optional[str] = None
+
+
+@dataclass
+class PulseStmtNode:
+    span: Span
+    order: Optional[str] = None  # seq_cst, acquire, release, relaxed
+
+
+@dataclass
+class GenericParamNode:
+    span: Span
+    name: str
+    bound: Optional[str] = None
+
+
 StmtNode = Union[
     LocalVarDeclNode, AssignmentNode, HandoverNode, QuarantineNode,
     ClinchNode, QuenchNode, GateNode, EmitNode, GuardNode,
-    IfNode, MatchNode, WhileNode, ForNode, UnsafeBlockNode,
+    IfNode, MatchNode, DiscernStmtNode, WhileNode, ForNode, UnsafeBlockNode,
     ReturnNode, ReboundNode, BreakNode, ContinueNode, DeferNode, ExprStmtNode,
+    ProbeStmtNode, PulseStmtNode,
 ]
 
 

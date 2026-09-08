@@ -1,0 +1,74 @@
+module foundation::generic_vec;
+
+// Coleção genérica canônica monomorfizada em tempo de compilação
+pub struct Vec forge<T> {
+    pub data: *mut T;
+    pub length: usize;
+    pub cap: usize;
+
+    pub fn new() -> Vec forge<T> {
+        return Vec {
+            data: null,
+            length: 0,
+            cap: 0,
+        };
+    }
+
+    pub fn with_capacity(initial_cap: usize, backing: *mut T) -> Vec forge<T> {
+        return Vec {
+            data: backing,
+            length: 0,
+            cap: initial_cap,
+        };
+    }
+
+    pub fn len(self: *const Vec forge<T>) -> usize {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return self.length;
+        }
+    }
+
+    pub fn capacity(self: *const Vec forge<T>) -> usize {
+        if self == null {
+            return 0;
+        }
+        unsafe {
+            return self.cap;
+        }
+    }
+
+    pub fn is_empty(self: *const Vec forge<T>) -> bool {
+        if self == null {
+            return true;
+        }
+        unsafe {
+            return self.length == 0;
+        }
+    }
+
+    pub fn push(self: *mut Vec forge<T>, item: T) -> bool {
+        if self == null {
+            return false;
+        }
+        unsafe {
+            if self.data == null || self.length >= self.cap {
+                return false;
+            }
+            let target: *mut T = self.data + self.length;
+            *target = item;
+            self.length = self.length + 1;
+            return true;
+        }
+    }
+
+    pub fn clear(self: *mut Vec forge<T>) {
+        if self != null {
+            unsafe {
+                self.length = 0;
+            }
+        }
+    }
+}

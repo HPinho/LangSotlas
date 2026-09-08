@@ -1,0 +1,61 @@
+name: Sotlas Release & Packaging
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão do Release (ex: 0.2.0)"
+        required: true
+        default: "0.2.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-packages:
+    name: Build Toolchain Packages
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Run packaging script
+      run: |
+        python packaging/package.py --target all
+
+    - name: Compile Inno Setup Windows Installer
+      uses: Min-Feng/action-innosetup@v1
+      with:
+        iss: packaging/windows/sotlas.iss
+      continue-on-error: true
+
+    - name: Update Checksums with Inno Setup installer
+      shell: pwsh
+      run: |
+        Get-ChildItem dist\*.exe, dist\*.zip, dist\*.tar.gz | ForEach-Object {
+          $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($_.Name)"
+        } | Out-File -Encoding utf8 dist\SHA256SUMS.txt
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          dist/*.zip
+          dist/*.tar.gz
+          dist/*.exe
+          dist/SHA256SUMS.txt
+          packaging/install.ps1
+          packaging/install.sh
+        draft: false
+        prerelease: false
+        generate_release_notes: true

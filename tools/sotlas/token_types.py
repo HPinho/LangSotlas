@@ -144,6 +144,15 @@ class TK(Enum):
     KW_GUARD     = auto()   # guard
 
     # -------------------------------------------------------------------------
+    # Palavras-chave Proprietárias Exclusivas de Sotlas
+    # -------------------------------------------------------------------------
+    KW_DISCERN   = auto()   # discern (pattern matching exaustivo)
+    KW_FORGE     = auto()   # forge (monomorphized generics)
+    KW_ENCLAVE   = auto()   # enclave (concorrência e isolamento atômico)
+    KW_PROBE     = auto()   # probe (sonda de teste e asserção de hardware)
+    KW_PULSE     = auto()   # pulse (barreira de memória e sincronização de clock)
+
+    # -------------------------------------------------------------------------
     # Palavras-chave — Valores Literais
     # -------------------------------------------------------------------------
     KW_TRUE      = auto()   # true
@@ -342,6 +351,11 @@ KEYWORDS: dict[str, TK] = {
     "notch":      TK.KW_NOTCH,
     "strand":     TK.KW_STRAND,
     "bound":      TK.KW_BOUND,
+    "discern":    TK.KW_DISCERN,
+    "forge":      TK.KW_FORGE,
+    "enclave":    TK.KW_ENCLAVE,
+    "probe":      TK.KW_PROBE,
+    "pulse":      TK.KW_PULSE,
 }
 
 # co-owned usa hífen — tratado separadamente no lexer (IDENT "co" seguido de MINUS "owned"

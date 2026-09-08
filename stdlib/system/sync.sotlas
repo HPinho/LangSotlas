@@ -1,0 +1,57 @@
+module system::sync;
+
+// Barreira atômica de sincronização de clock e cerca de coerência de memória
+pub fn pulse() {
+    unsafe {
+        __asm__ volatile ("mfence" : : : "memory");
+    }
+}
+
+pub fn cpu_pause() {
+    unsafe {
+        __asm__ volatile ("pause" : : : "memory");
+    }
+}
+
+// Bloqueio de rotação (SpinLock) para sincronização bare-metal entre núcleos
+pub struct SpinLock {
+    pub locked: u32;
+
+    pub fn new() -> SpinLock {
+        return SpinLock { locked: 0 };
+    }
+
+    pub fn lock(mut self) {
+        unsafe {
+            while self.locked != 0 {
+                cpu_pause();
+            }
+            self.locked = 1;
+            pulse();
+        }
+    }
+
+    pub fn unlock(mut self) {
+        unsafe {
+            pulse();
+            self.locked = 0;
+        }
+    }
+
+    pub fn is_locked(self) -> bool {
+        return self.locked != 0;
+    }
+}
+
+// Enclave: Encapsulamento atômico seguro para dados concorrentes
+pub struct Enclave forge<T> {
+    pub lock: SpinLock;
+    pub value: T;
+
+    pub fn new(initial: T) -> Enclave forge<T> {
+        return Enclave {
+            lock: SpinLock::new(),
+            value: initial,
+        };
+    }
+}

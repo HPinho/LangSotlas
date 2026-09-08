@@ -400,11 +400,20 @@ class Parser:
         raise SotlasBootstrapError(f"esperado {kind}, encontrado {self.current.kind}",
                         self.current.line, self.current.column, self.filename, self.source)
 
-    def ident(self) -> str: return self.expect("IDENT").text
+    def _accept_ident_or_contextual(self) -> bool:
+        if self.current.kind == "IDENT" or self.current.kind in ("pulse", "probe", "forge", "enclave", "discern"):
+            self.at += 1
+            return True
+        return False
+
+    def ident(self) -> str:
+        if self._accept_ident_or_contextual():
+            return self.tokens[self.at - 1].text
+        return self.expect("IDENT").text
 
     def path(self) -> str:
         parts = [self.ident()]
-        while self.current.kind == "::" and self.tokens[self.at + 1].kind == "IDENT":
+        while self.current.kind == "::" and (self.tokens[self.at + 1].kind == "IDENT" or self.tokens[self.at + 1].kind in ("pulse", "probe", "forge", "enclave", "discern")):
             self.at += 1; parts.append(self.ident())
         return "::".join(parts)
 
@@ -727,11 +736,12 @@ class Parser:
         elif self.accept("("):
             expr = self.expression()
             self.expect(")")
-        elif self.accept("IDENT"):
+        elif self._accept_ident_or_contextual():
+            token = self.tokens[self.at - 1]
             name = token.text
             # Struct literal: IDENT { field: val, ... }
             if (self.current.kind == "{" and self.at + 2 < len(self.tokens) and
-                    self.tokens[self.at + 1].kind == "IDENT" and self.tokens[self.at + 2].kind == ":"):
+                    (self.tokens[self.at + 1].kind == "IDENT" or self.tokens[self.at + 1].kind in ("pulse", "probe", "forge", "enclave", "discern")) and self.tokens[self.at + 2].kind == ":"):
                 self.expect("{")
                 fields = []
                 while not self.accept("}"):

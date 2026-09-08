@@ -12,6 +12,7 @@ from .lexer import Lexer, SotlasLexError
 from .parser import Parser, SotlasParseError
 from .sema import Sema, SotlasSemaError
 from .codegen_c import CodegenC
+from .codegen_wasm import CodegenWasm
 from sotlas_compile import (
     compile_source as _canonical_compile_source,
     SotlasBootstrapError,
@@ -28,6 +29,7 @@ __all__ = [
     "SotlasSemaError",
     "SotlasBootstrapError",
     "CodegenC",
+    "CodegenWasm",
     "compile_source",
     "compile_legacy_source",
 ]

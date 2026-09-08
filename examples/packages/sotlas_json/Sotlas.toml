@@ -1,0 +1,9 @@
+[package]
+name = "sotlas_json"
+version = "0.1.0"
+edition = "2026"
+license = "Apache-2.0"
+authors = ["Sotlas Systems Core <core@sotlas.org>"]
+target_type = "lib"
+
+[dependencies]

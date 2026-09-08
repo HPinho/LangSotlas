@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
-    # Builds noturnos diários às 02:00 UTC (estilo ci.swift.org)
+    # Builds noturnos diários às 02:00 UTC
     - cron: '0 2 * * *'
 
 jobs:

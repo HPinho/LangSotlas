@@ -111,6 +111,7 @@ class Sema:
         self._warnings: List[str] = []
         # Quando True, identificadores não resolvidos são aceitos (campo de self implícito)
         self._in_method: bool = False
+        self._enums: Dict[str, EnumDeclNode] = {}
 
     @property
     def errors(self) -> List[SotlasSemaError]:
@@ -189,11 +190,15 @@ class Sema:
 
     def _pass1_collect(self) -> None:
         self._collect_imported_symbols()
+        for builtin_t in ("Enclave", "SpinLock", "Vec", "String", "Option", "Result", "Self"):
+            self._global.define(Symbol(builtin_t, "type", None, Span(self._fn, 0, 0)))
         for decl in self._ast.decls:
             if isinstance(decl, (StructDeclNode, ClassDeclNode, MeshDeclNode,
                                  SpecDeclNode, EnumDeclNode)):
                 sym = Symbol(decl.name, "type", None, decl.span)
                 self._global.define(sym)
+                if isinstance(decl, EnumDeclNode):
+                    self._enums[decl.name] = decl
             elif isinstance(decl, FnDeclNode):
                 sym = Symbol(decl.name, "fn", None, decl.span)
                 self._global.define(sym)
@@ -240,10 +245,12 @@ class Sema:
 
     def _check_struct(self, decl: StructDeclNode) -> None:
         scope = self._global.child()
+        for g in getattr(decl, "generics", []):
+            scope.define(Symbol(g, "type", None, decl.span))
         prev_in_method = self._in_method
         for member in decl.members:
             if isinstance(member, FieldDeclNode):
-                self._check_type(member.type_ann, member.span)
+                self._check_type(member.type_ann, member.span, scope)
                 if self._is_barecore:
                     self._assert_no_dynamic_alloc(member.type_ann, member.span)
                 if member.default:
@@ -271,10 +278,12 @@ class Sema:
                 decl.span
             )
         scope = self._global.child()
+        for g in getattr(decl, "generics", []):
+            scope.define(Symbol(g, "type", None, decl.span))
         prev_in_method = self._in_method
         for member in decl.members:
             if isinstance(member, FieldDeclNode):
-                self._check_type(member.type_ann, member.span)
+                self._check_type(member.type_ann, member.span, scope)
                 if member.default:
                     self._check_expr(member.default, scope)
             elif isinstance(member, FnDeclNode):
@@ -296,8 +305,10 @@ class Sema:
         if decl.body is None:
             return
         scope = outer.child()
+        for g in getattr(decl, "generics", []):
+            scope.define(Symbol(g, "type", None, decl.span))
         for param in decl.params:
-            self._check_type(param.type_ann, param.span)
+            self._check_type(param.type_ann, param.span, scope)
             if self._is_barecore:
                 self._assert_no_dynamic_alloc(param.type_ann, param.span)
             sym = Symbol(param.name, "param", param.type_ann, param.span,
@@ -306,7 +317,7 @@ class Sema:
             if sym.is_island:
                 self._island_vars.add(param.name)
         if decl.ret:
-            self._check_type(decl.ret, decl.span)
+            self._check_type(decl.ret, decl.span, scope)
             if self._is_barecore:
                 self._assert_no_dynamic_alloc(decl.ret, decl.span)
         for stmt in decl.body:
@@ -318,7 +329,7 @@ class Sema:
     def _check_trapfn(self, decl: TrapFnDeclNode) -> None:
         scope = self._global.child()
         for param in decl.params:
-            self._check_type(param.type_ann, param.span)
+            self._check_type(param.type_ann, param.span, scope)
             scope.define(Symbol(param.name, "param", param.type_ann, param.span))
         for stmt in decl.body:
             self._check_stmt(stmt, scope)
@@ -326,12 +337,13 @@ class Sema:
     def _check_init(self, decl: InitDeclNode, outer: Scope) -> None:
         scope = outer.child()
         for param in decl.params:
+            self._check_type(param.type_ann, param.span, scope)
             scope.define(Symbol(param.name, "param", param.type_ann, param.span))
         for stmt in decl.body:
             self._check_stmt(stmt, scope)
 
     def _check_static(self, decl: StaticDeclNode) -> None:
-        self._check_type(decl.type_ann, decl.span)
+        self._check_type(decl.type_ann, decl.span, self._global)
         if self._is_barecore:
             self._assert_no_dynamic_alloc(decl.type_ann, decl.span)
         self._check_expr(decl.value, self._global)
@@ -340,16 +352,22 @@ class Sema:
     # Verificação de Tipos
     # ------------------------------------------------------------------
 
-    def _check_type(self, t: TypeNode, span: Span) -> None:
+    def _check_type(self, t: Optional[TypeNode], span: Span, scope: Optional[Scope] = None) -> None:
+        if t is None:
+            return
+        lookup_scope = scope if scope is not None else self._global
         if t.is_topology_ptr:
             self._check_topology_ptr(t, span)
         if t.is_tuple:
             for elem in t.tuple_elements:
-                self._check_type(elem, span)
+                self._check_type(elem, span, lookup_scope)
         if t.is_slice and t.inner_type:
-            self._check_type(t.inner_type, span)
+            self._check_type(t.inner_type, span, lookup_scope)
+        if hasattr(t, "generic_args") and t.generic_args:
+            for g_arg in t.generic_args:
+                self._check_type(g_arg, span, lookup_scope)
         if t.name and not t.is_primitive and t.name != "()" and t.name != "!":
-            if not self._global.lookup(t.name):
+            if not lookup_scope.lookup(t.name):
                 self._err(f"tipo '{t.name}' não declarado", span)
 
     def _check_topology_ptr(self, t: TypeNode, span: Span) -> None:
@@ -414,6 +432,12 @@ class Sema:
                 if isinstance(arm.body, list):
                     for st in arm.body:
                         self._check_stmt(st, s)
+        elif isinstance(stmt, DiscernStmtNode):
+            self._check_discern(stmt, scope)
+        elif isinstance(stmt, ProbeStmtNode):
+            self._check_expr(stmt.condition, scope)
+        elif isinstance(stmt, PulseStmtNode):
+            pass
         elif isinstance(stmt, WhileNode):
             self._check_expr(stmt.condition, scope)
             s = scope.child()
@@ -446,9 +470,43 @@ class Sema:
         elif isinstance(stmt, ExprStmtNode):
             self._check_expr(stmt.expr, scope)
 
+    def _check_discern(self, stmt: DiscernStmtNode, scope: Scope) -> None:
+        self._check_expr(stmt.subject, scope)
+        enum_decl = None
+        if isinstance(stmt.subject, IdentNode):
+            sym = scope.lookup(stmt.subject.name)
+            if sym and sym.type_node and sym.type_node.name in self._enums:
+                enum_decl = self._enums[sym.type_node.name]
+
+        covered_variants: Set[str] = set()
+        has_wildcard = stmt.default_case is not None
+
+        for case in stmt.cases:
+            s = scope.child()
+            if case.pattern.kind == "enum_variant":
+                covered_variants.add(str(case.pattern.value))
+            elif case.pattern.kind == "wildcard":
+                has_wildcard = True
+            if case.guard:
+                self._check_expr(case.guard, s)
+            for st in case.body:
+                self._check_stmt(st, s)
+
+        if stmt.default_case:
+            s = scope.child()
+            for st in stmt.default_case:
+                self._check_stmt(st, s)
+
+        if enum_decl and not has_wildcard:
+            all_variants = {v.name for v in enum_decl.variants}
+            missing = all_variants - covered_variants
+            if missing:
+                missing_str = ", ".join(sorted(missing))
+                self._err(f"discern não exaustivo: variantes ausentes: {missing_str}", stmt.span)
+
     def _check_local_var(self, stmt: LocalVarDeclNode, scope: Scope) -> None:
         if stmt.type_ann:
-            self._check_type(stmt.type_ann, stmt.span)
+            self._check_type(stmt.type_ann, stmt.span, scope)
             if self._is_barecore:
                 self._assert_no_dynamic_alloc(stmt.type_ann, stmt.span)
         self._check_expr(stmt.init, scope)
@@ -592,7 +650,7 @@ class Sema:
             self._check_expr(expr.base, scope)
         elif isinstance(expr, CastExprNode):
             self._check_expr(expr.expr, scope)
-            self._check_type(expr.target_type, expr.span)
+            self._check_type(expr.target_type, expr.span, scope)
             if expr.target_type and (expr.target_type.is_topology_ptr or expr.target_type.topology_ptr):
                 if self._unsafe_depth <= 0:
                     self._err("criação/conversão para ponteiro cru exige bloco unsafe explícito", expr.span)

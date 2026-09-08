@@ -14,9 +14,16 @@ pub fn sotlas_compile(source: *const u8, out_buf: *mut u8, max_len: usize) -> us
         return 0;
     }
     let mut tokens: [Token; 512] = 0;
-    let tok_count: usize = lex_source(source, tokens as *mut Token, MAX_TOKENS);
+    let mut tok_count: usize = 0;
+    unsafe {
+        tok_count = lex_source(source, tokens as *mut Token, MAX_TOKENS);
+    }
     if tok_count == 0 {
         return 0;
     }
-    return emit_c_from_tokens(tokens as *const Token, tok_count, out_buf, max_len);
+    let mut emitted: usize = 0;
+    unsafe {
+        emitted = emit_c_from_tokens(tokens as *const Token, tok_count, out_buf, max_len);
+    }
+    return emitted;
 }

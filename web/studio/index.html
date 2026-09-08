@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sotlas Studio — Ambiente Interativo de Sistemas</title>
+  <style>
+    :root {
+      --bg-main: #0d1117;
+      --bg-panel: #161b22;
+      --bg-header: #1f242c;
+      --border-color: #30363d;
+      --text-main: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent-blue: #58a6ff;
+      --accent-green: #2ea043;
+      --accent-green-hover: #3fb950;
+      --accent-purple: #bc8cff;
+      --accent-orange: #f0883e;
+      --accent-red: #f85149;
+      --font-mono: "Fira Code", Consolas, Monaco, "Courier New", monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background-color: var(--bg-header);
+      border-bottom: 1px solid var(--border-color);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 1.1rem;
+      letter-spacing: 0.5px;
+    }
+
+    .brand svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 12px;
+      background: #21262d;
+      border: 1px solid var(--border-color);
+      color: var(--accent-blue);
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    select, button {
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background-color: #21262d;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    select:focus, button:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+
+    .btn-run {
+      background-color: var(--accent-green);
+      color: #ffffff;
+      border-color: rgba(240, 246, 252, 0.1);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-run:hover {
+      background-color: var(--accent-green-hover);
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      height: calc(100vh - 52px);
+    }
+
+    .pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-color);
+      height: 100%;
+      position: relative;
+    }
+
+    .pane:last-child {
+      border-right: none;
+    }
+
+    .pane-header {
+      background-color: var(--bg-panel);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 38px;
+      padding: 0 12px;
+      user-select: none;
+    }
+
+    .tabs {
+      display: flex;
+      height: 100%;
+    }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      height: 100%;
+      transition: all 0.15s ease;
+    }
+
+    .tab:hover {
+      color: var(--text-main);
+    }
+
+    .tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+      background-color: rgba(56, 139, 253, 0.05);
+      font-weight: 500;
+    }
+
+    .editor-container {
+      flex: 1;
+      position: relative;
+      background-color: var(--bg-main);
+    }
+
+    textarea#editor {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 1.5;
+      padding: 16px;
+      border: none;
+      resize: none;
+      outline: none;
+      tab-size: 4;
+      white-space: pre;
+    }
+
+    .viewer-content {
+      flex: 1;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      background-color: #0b0e14;
+    }
+
+    .status-bar {
+      height: 24px;
+      background-color: var(--bg-panel);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      margin-right: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <img src="icon.svg" alt="Sotlas Logo" style="width: 30px; height: 30px; border-radius: 6px; vertical-align: middle;">
+      <span>SOTLAS STUDIO</span>
+      <span class="badge">v0.2.0</span>
+    </div>
+
+    <div class="controls">
+      <label for="example-select" style="font-size: 0.8rem; color: var(--text-muted);">Exemplos:</label>
+      <select id="example-select" onchange="loadExample(this.value)">
+        <option value="forge">1. Generics Monomorfizados (forge&lt;T&gt;)</option>
+        <option value="discern">2. Pattern Matching Exaustivo (discern)</option>
+        <option value="sync">3. Concorrência &amp; Kernel (enclave / pulse)</option>
+        <option value="hello">4. Hello Bare-Metal Systems</option>
+      </select>
+
+      <button class="btn-run" onclick="runCode()">
+        <span style="font-size: 0.9rem;">▶</span> Executar (Ctrl+Enter)
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Painel Esquerdo: Editor -->
+    <div class="pane">
+      <div class="pane-header">
+        <span style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted);">EDITOR DE CÓDIGO (SOTLAS)</span>
+        <button onclick="clearEditor()" style="padding: 2px 8px; font-size: 0.75rem;">Limpar</button>
+      </div>
+      <div class="editor-container">
+        <textarea id="editor" spellcheck="false"></textarea>
+      </div>
+      <div class="status-bar">
+        <span><span class="status-indicator"></span>Pronto</span>
+        <span id="line-col-info">Linha 1, Coluna 1</span>
+      </div>
+    </div>
+
+    <!-- Painel Direito: Abas de Saída -->
+    <div class="pane">
+      <div class="pane-header">
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab('exec', this)">Execução &amp; Saída</div>
+          <div class="tab" onclick="switchTab('wasm', this)">WebAssembly (WAT)</div>
+          <div class="tab" onclick="switchTab('llvm', this)">LLVM IR Nativo</div>
+          <div class="tab" onclick="switchTab('c11', this)">C11 Freestanding</div>
+          <div class="tab" onclick="switchTab('ast', this)">AST &amp; SIR</div>
+        </div>
+      </div>
+      <div id="viewer" class="viewer-content">Clique em "Executar (Ctrl+Enter)" para compilar e testar seu código.</div>
+      <div class="status-bar">
+        <span id="comp-time">Tempo de compilação: -- ms</span>
+        <span id="backend-status">Backend: WebAssembly / LLVM / C11</span>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const EXAMPLES = {
+      forge: `module demo::generics;
+
+// Forja paramétrica monomorfizada em tempo de compilação (zero overhead)
+pub struct Caixa forge<T> {
+    pub valor: T;
+
+    pub fn new(v: T) -> Caixa forge<T> {
+        return Caixa { valor: v };
+    }
+
+    pub fn get(self) -> T {
+        return self.valor;
+    }
+}
+
+pub fn main() -> i64 {
+    let c = Caixa forge<i64>::new(42);
+    probe c.get() == 42;
+    return c.get();
+}
+`,
+      discern: `module demo::discern_matching;
+
+pub enum StatusServico {
+    Inativo,
+    Inicializando,
+    Operacional,
+    FalhaCritica,
+}
+
+pub fn avaliar_status(st: StatusServico) -> i64 {
+    // Casamento de padrões exaustivo com checagem matemática
+    discern st {
+        case .Inativo => {
+            return 0;
+        }
+        case .Inicializando => {
+            return 1;
+        }
+        case .Operacional => {
+            return 2;
+        }
+        case .FalhaCritica => {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+pub fn main() -> i64 {
+    let s = StatusServico::Operacional;
+    let res = avaliar_status(s);
+    probe res == 2;
+    return res;
+}
+`,
+      sync: `module demo::kernel_sync;
+
+// Primitiva de barreira atômica de clock
+pub fn sincronizar() {
+    pulse();
+}
+
+pub struct ContadorSeguro {
+    pub valor: i64;
+
+    pub fn incrementar(mut self) {
+        unsafe {
+            pulse();
+            self.valor = self.valor + 1;
+            pulse();
+        }
+    }
+}
+
+pub fn main() -> i64 {
+    sincronizar();
+    let mut c = ContadorSeguro { valor: 10 };
+    c.incrementar();
+    probe c.valor == 11;
+    return c.valor;
+}
+`,
+      hello: `module demo::hello;
+
+pub fn somar(a: i64, b: i64) -> i64 {
+    return a + b;
+}
+
+pub fn main() -> i64 {
+    let total = somar(40, 2);
+    probe total == 42;
+    return total;
+}
+`
+    };
+
+    let currentTab = 'exec';
+    let lastResults = {
+      exec: 'Clique em Executar para testar o código.',
+      wasm: '',
+      llvm: '',
+      c11: '',
+      ast: ''
+    };
+
+    function loadExample(name) {
+      if (EXAMPLES[name]) {
+        document.getElementById('editor').value = EXAMPLES[name];
+        updateLineCol();
+      }
+    }
+
+    function clearEditor() {
+      document.getElementById('editor').value = '';
+      updateLineCol();
+    }
+
+    function switchTab(tabName, el) {
+      currentTab = tabName;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      if (el) el.classList.add('active');
+      document.getElementById('viewer').textContent = lastResults[tabName] || '(Aba vazia ou não compilada)';
+    }
+
+    async function runCode() {
+      const code = document.getElementById('editor').value;
+      const viewer = document.getElementById('viewer');
+      viewer.textContent = 'Compilando e verificando semântica...';
+      const t0 = performance.now();
+
+      try {
+        const response = await fetch('/api/compile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: code })
+        });
+        const data = await response.json();
+        const t1 = performance.now();
+        document.getElementById('comp-time').textContent = 'Tempo de compilação: ' + (t1 - t0).toFixed(1) + ' ms';
+
+        if (data.status === 'ok') {
+          lastResults.exec = data.output || 'Compilação concluída com sucesso. Zero erros ou alertas de segurança.';
+          lastResults.wasm = data.wasm || '(WAT não disponível)';
+          lastResults.llvm = data.llvm || '(LLVM IR não disponível)';
+          lastResults.c11 = data.c11 || '(C11 não disponível)';
+          lastResults.ast = data.ast || '(AST não disponível)';
+        } else {
+          lastResults.exec = 'ERRO DE COMPILAÇÃO:\n' + (data.error || 'Erro desconhecido');
+        }
+        document.getElementById('viewer').textContent = lastResults[currentTab] || lastResults.exec;
+      } catch (err) {
+        viewer.textContent = 'Erro de comunicação com o compilador Sotlas Studio:\n' + err.message;
+      }
+    }
+
+    function updateLineCol() {
+      const ta = document.getElementById('editor');
+      const val = ta.value.substring(0, ta.selectionStart);
+      const lines = val.split('\n');
+      const line = lines.length;
+      const col = lines[lines.length - 1].length + 1;
+      document.getElementById('line-col-info').textContent = 'Linha ' + line + ', Coluna ' + col;
+    }
+
+    const editor = document.getElementById('editor');
+    editor.addEventListener('keyup', updateLineCol);
+    editor.addEventListener('click', updateLineCol);
+    editor.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        runCode();
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+        this.selectionStart = this.selectionEnd = start + 4;
+        updateLineCol();
+      }
+    });
+
+    // Carregar primeiro exemplo ao iniciar
+    loadExample('forge');
+  </script>
+</body>
+</html>

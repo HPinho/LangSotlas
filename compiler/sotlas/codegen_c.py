@@ -182,6 +182,9 @@ class CodegenC:
                 return "void"
             if t.name == "!":
                 return "void"
+            if t.generic_args:
+                args_str = "_".join(self._emit_bare_type(a) for a in t.generic_args).replace("*", "ptr").replace(" ", "_")
+                return f"{t.name}_{args_str}"
             return t.name
         return "void"
 
@@ -416,6 +419,12 @@ class CodegenC:
             self._emit_if(stmt)
         elif isinstance(stmt, MatchNode):
             self._emit_match(stmt)
+        elif isinstance(stmt, DiscernStmtNode):
+            self._emit_discern(stmt)
+        elif isinstance(stmt, ProbeStmtNode):
+            self._emit_probe(stmt)
+        elif isinstance(stmt, PulseStmtNode):
+            self._emit_pulse(stmt)
         elif isinstance(stmt, WhileNode):
             self._line(f"while ({self._emit_expr(stmt.condition)}) {{")
             self._indent_inc()
@@ -569,6 +578,52 @@ class CodegenC:
             self._indent_dec()
         self._indent_dec()
         self._line("}")
+
+    def _emit_discern(self, stmt: DiscernStmtNode) -> None:
+        subj = self._emit_expr(stmt.subject)
+        self._line(f"switch ({subj}) {{")
+        self._indent_inc()
+        has_default = False
+        for case in stmt.cases:
+            pat = case.pattern
+            if pat.kind == "wildcard":
+                self._line("default:")
+                has_default = True
+            elif pat.kind == "literal":
+                val = self._emit_expr(pat.value) if isinstance(pat.value, LiteralNode) else str(pat.value)
+                self._line(f"case {val}:")
+            elif pat.kind == "enum_variant":
+                self._line(f"case {pat.value}:")
+            else:
+                self._line(f"case {pat.value}:")
+            self._indent_inc()
+            for st in case.body:
+                self._emit_stmt(st)
+            self._line("break;")
+            self._indent_dec()
+        if stmt.default_case and not has_default:
+            self._line("default:")
+            self._indent_inc()
+            for st in stmt.default_case:
+                self._emit_stmt(st)
+            self._line("break;")
+            self._indent_dec()
+        self._indent_dec()
+        self._line("}")
+
+    def _emit_probe(self, stmt: ProbeStmtNode) -> None:
+        cond = self._emit_expr(stmt.condition)
+        msg = f'"{stmt.message}"' if stmt.message else '"probe failed"'
+        self._line(f"if (!({cond})) {{ /* probe: */ (void)({msg}); __builtin_trap(); }}")
+
+    def _emit_pulse(self, stmt: PulseStmtNode) -> None:
+        order = stmt.order or "seq_cst"
+        if order == "acquire":
+            self._line('__asm__ volatile("" ::: "memory"); /* pulse acquire */')
+        elif order == "release":
+            self._line('__asm__ volatile("" ::: "memory"); /* pulse release */')
+        else:
+            self._line('__asm__ volatile("mfence" ::: "memory"); /* pulse seq_cst */')
 
     # ------------------------------------------------------------------
     # Expressões

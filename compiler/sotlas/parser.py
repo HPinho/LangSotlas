@@ -66,6 +66,19 @@ class Parser:
             return True
         return False
 
+    def _is_ident_like(self, tok: Token) -> bool:
+        return tok.kind == TK.IDENT or tok.kind in (
+            TK.KW_PULSE, TK.KW_PROBE, TK.KW_ENCLAVE, TK.KW_FORGE, TK.KW_DISCERN, TK.KW_SELF,
+            TK.KW_BOOL, TK.KW_NIL, TK.KW_VOID
+        ) or tok.kind in PRIMITIVE_TOKENS
+
+    def _expect_ident_or_keyword(self) -> str:
+        tok = self._cur()
+        if self._is_ident_like(tok):
+            self._advance()
+            return tok.value
+        raise SotlasParseError(f"identificador esperado, encontrado {tok.kind.name} ({tok.value!r})", self._fn, tok.line, tok.col)
+
     # ------------------------------------------------------------------
     # Ponto de Entrada
     # ------------------------------------------------------------------
@@ -113,20 +126,20 @@ class Parser:
                 items = None  # wildcard *
             elif self._match(TK.LBRACE):
                 self._advance()
-                items = [self._expect(TK.IDENT).value]
+                items = [self._expect_ident_or_keyword()]
                 while self._consume(TK.COMMA):
                     if self._match(TK.RBRACE):
                         break
-                    items.append(self._expect(TK.IDENT).value)
+                    items.append(self._expect_ident_or_keyword())
                 self._expect(TK.RBRACE)
         self._expect(TK.SEMICOLON)
         return ImportDeclNode(span, is_pub, path, items)
 
     def _parse_qualified_ident(self) -> List[str]:
-        parts = [self._expect(TK.IDENT).value]
-        while self._match(TK.DCOLON) and self._peek().kind == TK.IDENT:
+        parts = [self._expect_ident_or_keyword()]
+        while self._match(TK.DCOLON) and self._is_ident_like(self._peek()):
             self._advance()
-            parts.append(self._expect(TK.IDENT).value)
+            parts.append(self._expect_ident_or_keyword())
         return parts
 
     # ------------------------------------------------------------------
@@ -190,7 +203,7 @@ class Parser:
 
     def _parse_struct_decl(self, span, directives, is_pub) -> StructDeclNode:
         self._expect(TK.KW_STRUCT)
-        name = self._expect(TK.IDENT).value
+        name = self._expect_ident_or_keyword()
         generics = self._parse_generic_params()
         adopts = self._parse_adopts()
         self._expect(TK.LBRACE)
@@ -263,7 +276,7 @@ class Parser:
         variants = []
         while not self._match(TK.RBRACE, TK.EOF):
             vs = self._span()
-            vname = self._expect(TK.IDENT).value
+            vname = self._expect_ident_or_keyword()
             params = []
             if self._consume(TK.LPAREN):
                 params = self._parse_param_list()
@@ -310,7 +323,7 @@ class Parser:
         irqfree = self._consume(TK.KW_IRQFREE)
         async_ = self._consume(TK.KW_ASYNC)
         self._expect(TK.KW_FN)
-        name = self._expect(TK.IDENT).value
+        name = self._expect_ident_or_keyword()
         generics = self._parse_generic_params()
         self._expect(TK.LPAREN)
         params = self._parse_param_list()
@@ -399,7 +412,7 @@ class Parser:
         if self._match(TK.KW_VAR, TK.KW_LET, TK.KW_MUT):
             is_var = self._cur().kind in (TK.KW_VAR, TK.KW_MUT)
             self._advance()
-        name = self._expect(TK.IDENT).value
+        name = self._expect_ident_or_keyword()
         self._expect(TK.COLON)
         typ = self._parse_type()
         default = None
@@ -429,10 +442,19 @@ class Parser:
 
     def _parse_param(self) -> ParamNode:
         span = self._span()
-        # label name: Type  OR  name: Type
+        is_ref = False
+        is_mut = False
+        if self._consume(TK.LAND):
+            is_ref = True
+            is_mut = self._consume(TK.KW_MUT)
+        elif self._consume(TK.KW_MUT):
+            is_mut = True
+        name = self._expect_ident_or_keyword()
+        if name == "self" and not self._match(TK.COLON):
+            typ = TypeNode(span, None, None, is_mut, None, "Self", False, False, None, None, None)
+            return ParamNode(span, None, "self", typ, None)
         label = None
-        name = self._expect(TK.IDENT).value
-        if self._match(TK.IDENT):
+        if self._is_ident_like(self._cur()):
             label = name
             name = self._advance().value
         self._expect(TK.COLON)
@@ -443,14 +465,23 @@ class Parser:
         return ParamNode(span, label, name, typ, default)
 
     def _parse_generic_params(self) -> List[str]:
+        if self._consume(TK.KW_FORGE):
+            self._expect(TK.LT)
+            names = [self._expect_ident_or_keyword()]
+            while self._consume(TK.COMMA):
+                if self._match(TK.GT):
+                    break
+                names.append(self._expect_ident_or_keyword())
+            self._expect(TK.GT)
+            return names
         if not self._match(TK.LT):
             return []
         self._advance()
-        names = [self._expect(TK.IDENT).value]
+        names = [self._expect_ident_or_keyword()]
         while self._consume(TK.COMMA):
             if self._match(TK.GT):
                 break
-            names.append(self._expect(TK.IDENT).value)
+            names.append(self._expect_ident_or_keyword())
         self._expect(TK.GT)
         return names
 
@@ -554,12 +585,23 @@ class Parser:
             self._advance()
             name = "!"
             primitive = TK.KW_VOID
-        elif self._match(TK.IDENT):
-            name = self._advance().value
-            if self._match(TK.LT):
+        elif self._is_ident_like(self._cur()):
+            tok = self._advance()
+            name = "Enclave" if tok.kind == TK.KW_ENCLAVE else tok.value
+            if self._consume(TK.KW_FORGE):
+                self._expect(TK.LT)
+                generic_args.append(self._parse_type())
+                while self._consume(TK.COMMA):
+                    if self._match(TK.GT):
+                        break
+                    generic_args.append(self._parse_type())
+                self._expect(TK.GT)
+            elif self._match(TK.LT):
                 self._advance()
                 generic_args.append(self._parse_type())
                 while self._consume(TK.COMMA):
+                    if self._match(TK.GT):
+                        break
                     generic_args.append(self._parse_type())
                 self._expect(TK.GT)
         else:
@@ -610,7 +652,7 @@ class Parser:
             return QuenchNode(span, body)
         if cur == TK.KW_GATE:
             return self._parse_gate(span)
-        if cur == TK.KW_EMIT:
+        if cur == TK.KW_EMIT or (cur == TK.IDENT and self._cur().value in ("__asm__", "asm")):
             return self._parse_emit(span)
         if cur == TK.KW_GUARD:
             return self._parse_guard(span)
@@ -618,6 +660,12 @@ class Parser:
             return self._parse_if(span)
         if cur == TK.KW_MATCH:
             return self._parse_match(span)
+        if cur == TK.KW_DISCERN:
+            return self._parse_discern(span)
+        if cur == TK.KW_PROBE:
+            return self._parse_probe(span)
+        if cur == TK.KW_PULSE:
+            return self._parse_pulse(span)
         if cur == TK.KW_WHILE:
             return self._parse_while(span)
         if cur == TK.KW_LOOP:
@@ -679,7 +727,7 @@ class Parser:
                 is_var = True
         elif self._consume(TK.KW_CONST_MOD):
             is_var = False
-        name = self._expect(TK.IDENT).value
+        name = self._expect_ident_or_keyword()
         typ = None
         if self._consume(TK.COLON):
             typ = self._parse_type()
@@ -705,7 +753,9 @@ class Parser:
         return GateNode(span, cond, body)
 
     def _parse_emit(self, span) -> EmitNode:
-        self._advance()  # consume 'emit'
+        self._advance()  # consume 'emit' or '__asm__' / 'asm'
+        if self._match(TK.IDENT) and self._cur().value in ("volatile", "__volatile__"):
+            self._advance()
         self._expect(TK.LPAREN)
         tmpl = self._expect(TK.STR_LIT).value
         outputs, inputs, clobbers = [], [], []
@@ -769,6 +819,71 @@ class Parser:
         self._expect(TK.RBRACE)
         return MatchNode(span, subject, arms)
 
+    def _parse_discern(self, span) -> DiscernStmtNode:
+        self._advance()  # consume 'discern'
+        subject = self._parse_expr()
+        self._expect(TK.LBRACE)
+        cases: List[DiscernCaseNode] = []
+        default_case: Optional[List[StmtNode]] = None
+        while not self._match(TK.RBRACE, TK.EOF):
+            cs_span = self._span()
+            if self._match(TK.IDENT) and self._cur().value == "case":
+                self._advance()
+                if self._match(TK.KW_ELSE) or (self._match(TK.IDENT) and self._cur().value == "else"):
+                    self._advance()
+                    self._expect(TK.FAT_ARROW)
+                    if self._match(TK.LBRACE):
+                        default_case = self._parse_block()
+                    else:
+                        default_case = [self._parse_stmt()]
+                    continue
+            elif self._match(TK.KW_ELSE):
+                self._advance()
+                self._expect(TK.FAT_ARROW)
+                if self._match(TK.LBRACE):
+                    default_case = self._parse_block()
+                else:
+                    default_case = [self._parse_stmt()]
+                continue
+
+            pat = self._parse_match_pattern()
+            guard = None
+            if self._match(TK.KW_IF):
+                self._advance()
+                guard = self._parse_expr()
+            self._expect(TK.FAT_ARROW)
+            if self._match(TK.LBRACE):
+                body = self._parse_block()
+            else:
+                body = [self._parse_stmt()]
+            if pat.kind == "wildcard" and not guard:
+                default_case = body
+            cases.append(DiscernCaseNode(cs_span, pat, guard, body))
+        self._expect(TK.RBRACE)
+        return DiscernStmtNode(span, subject, cases, default_case)
+
+    def _parse_probe(self, span) -> ProbeStmtNode:
+        self._advance()  # consume 'probe'
+        cond = self._parse_expr()
+        msg = None
+        if self._consume(TK.COMMA):
+            if self._match(TK.STR_LIT):
+                msg = self._advance().value
+            else:
+                msg = str(self._parse_expr())
+        self._expect(TK.SEMICOLON)
+        return ProbeStmtNode(span, cond, msg)
+
+    def _parse_pulse(self, span) -> PulseStmtNode:
+        self._advance()  # consume 'pulse'
+        order = None
+        if self._consume(TK.LPAREN):
+            if not self._match(TK.RPAREN):
+                order = self._expect(TK.IDENT).value
+            self._expect(TK.RPAREN)
+        self._expect(TK.SEMICOLON)
+        return PulseStmtNode(span, order)
+
     def _parse_match_pattern(self) -> MatchPatternNode:
         span = self._span()
         cur = self._cur()
@@ -781,7 +896,7 @@ class Parser:
             return MatchPatternNode(span, "wildcard", "_")
         if self._match(TK.DOT):
             self._advance()
-            name = self._expect(TK.IDENT).value
+            name = self._expect_ident_or_keyword()
             subs = []
             if self._consume(TK.LPAREN):
                 subs.append(self._parse_match_pattern())
@@ -791,7 +906,7 @@ class Parser:
                     subs.append(self._parse_match_pattern())
                 self._expect(TK.RPAREN)
             return MatchPatternNode(span, "enum_variant", name, subs)
-        name = self._expect(TK.IDENT).value
+        name = self._expect_ident_or_keyword()
         return MatchPatternNode(span, "ident", name)
 
     def _parse_while(self, span) -> WhileNode:
@@ -897,7 +1012,7 @@ class Parser:
                     idx_val = int(self._advance().value)
                     expr = TupleIndexExprNode(span, expr, idx_val)
                 else:
-                    name = self._expect(TK.IDENT).value
+                    name = self._expect_ident_or_keyword()
                     if self._match(TK.LPAREN):
                         self._advance()
                         args = self._parse_arg_list()
@@ -953,9 +1068,9 @@ class Parser:
             self._advance()
             return IdentNode(span, cur.value)
 
-        if cur.kind == TK.IDENT:
+        if self._is_ident_like(cur):
             path = [self._advance().value]
-            while self._match(TK.DCOLON) and self._peek().kind == TK.IDENT:
+            while self._match(TK.DCOLON) and self._is_ident_like(self._peek()):
                 self._advance()
                 path.append(self._advance().value)
             name = path[-1]
@@ -963,12 +1078,12 @@ class Parser:
             if self._match(TK.LBRACE):
                 p1 = self._peek(1)
                 p2 = self._peek(2)
-                if p1.kind == TK.RBRACE or (p1.kind == TK.IDENT and p2.kind == TK.COLON):
+                if p1.kind == TK.RBRACE or (self._is_ident_like(p1) and p2.kind == TK.COLON):
                     self._advance()  # consume {
                     fields = []
                     while not self._match(TK.RBRACE, TK.EOF):
                         fs = self._span()
-                        fname = self._expect(TK.IDENT).value
+                        fname = self._expect_ident_or_keyword()
                         self._expect(TK.COLON)
                         fval = self._parse_expr()
                         self._consume(TK.COMMA)

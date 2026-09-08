@@ -4,13 +4,19 @@
   "publisher": "bakenos",
   "description": "Suporte oficial à linguagem Sotlas: realce de sintaxe, LSP, diagnósticos e comandos de compilação",
   "version": "0.3.0",
-  "icon": "./icons/sotlas-icon.svg",
+  "icon": "./icons/sotlas-icon.png",
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": [
     "Programming Languages"
   ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HPinho/LangSotlas.git"
+  },
+  "homepage": "https://github.com/HPinho/LangSotlas",
   "keywords": ["sotlas", "baken", "systems", "kernel", "language"],
   "main": "./out/extension.js",
   "activationEvents": [
@@ -68,6 +74,18 @@
       {
         "command": "sotlas.format",
         "title": "Sotlas: Formatar Arquivo Atual"
+      },
+      {
+        "command": "sotlas.studio",
+        "title": "Sotlas: Abrir Sotlas Studio (Navegador)"
+      },
+      {
+        "command": "sotlas.repl",
+        "title": "Sotlas: Iniciar Terminal Interativo (REPL)"
+      },
+      {
+        "command": "sotlas.dumpWasm",
+        "title": "Sotlas: Emitir WebAssembly (.wat)"
       },
       {
         "command": "sotlas.restartServer",

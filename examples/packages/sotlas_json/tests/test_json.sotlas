@@ -1,0 +1,15 @@
+module sotlas_json::tests;
+
+import sotlas_json::lib::*;
+
+pub fn test_json_number() -> bool {
+    let j = JsonValue::new_number(42);
+    probe j.as_number() == 42;
+    return j.as_number() == 42;
+}
+
+pub fn test_json_null() -> bool {
+    let j = JsonValue::new_null();
+    probe j.is_null();
+    return j.is_null();
+}

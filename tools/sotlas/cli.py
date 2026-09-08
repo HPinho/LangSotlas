@@ -57,9 +57,25 @@ def main() -> int:
         help="Emite apenas o C11 intermediário (não invoca o compilador C)",
     )
     cp.add_argument(
+        "--emit-obj",
+        action="store_true",
+        help="Emite diretamente código objeto nativo (.o / .obj) via LLVM",
+    )
+    cp.add_argument(
+        "--emit-llvm",
+        action="store_true",
+        help="Emite código LLVM IR textual (.ll) com DWARF",
+    )
+    cp.add_argument(
+        "--backend",
+        choices=["llvm", "c11"],
+        default="llvm",
+        help="Backend de compilação (padrão: llvm quando disponível)",
+    )
+    cp.add_argument(
         "--cc",
         default="gcc",
-        help="Compilador C a invocar (padrão: gcc)",
+        help="Compilador C alternativo a invocar no modo C11 (padrão: gcc)",
     )
 
     # Subcomando: check
@@ -124,6 +140,23 @@ def main() -> int:
     tst = sub.add_parser("test", help="Executa a suíte de testes unitários da linguagem")
     tst.add_argument("-p", "--pattern", default="test_*.py", help="Padrão de arquivos de teste")
 
+    # Subcomando: repl
+    sub.add_parser("repl", help="Inicia o terminal interativo (REPL) da linguagem Sotlas")
+
+    # Subcomando: studio
+    std_p = sub.add_parser("studio", help="Inicia o ambiente Sotlas Studio / Web Playground")
+    std_p.add_argument("--port", type=int, default=8080, help="Porta TCP do servidor (padrão: 8080)")
+    std_p.add_argument("--no-browser", action="store_true", help="Não abre automaticamente o navegador")
+
+    # Subcomando: dump-wasm
+    dwasm = sub.add_parser("dump-wasm", help="Emite código WebAssembly Text (.wat) diretamente (bypass de C)")
+    dwasm.add_argument("source", help=f"Arquivo fonte {SOTLAS_EXT}")
+
+    # Subcomando: bootstrap
+    boot_p = sub.add_parser("bootstrap", help="Compila o compilador auto-hospedado gerando sotlas_native.exe")
+    boot_p.add_argument("-o", "--output", default=None, help="Caminho do executável nativo a gerar")
+    boot_p.add_argument("--no-verify", action="store_true", help="Pula o teste de verificação da auto-hospedagem")
+
     # Subcomando: version
     sub.add_parser("version", help="Exibe a versão do compilador")
 
@@ -162,6 +195,16 @@ def main() -> int:
         return _run_lsp()
     if args.cmd == "test":
         return _run_tests(args.pattern)
+    if args.cmd == "repl":
+        from sotlas.repl import start_repl
+        return start_repl()
+    if args.cmd == "studio":
+        from sotlas.studio import start_studio
+        return start_studio(port=args.port, open_browser=not args.no_browser)
+    if args.cmd == "dump-wasm":
+        return _run_dump_wasm(args.source)
+    if args.cmd == "bootstrap":
+        return _run_bootstrap(args)
     return 1
 
 
@@ -248,6 +291,26 @@ def _run_dump_llvm(source_path: str, emit_debug: bool = False) -> int:
     return 0
 
 
+def _run_dump_wasm(source_path: str) -> int:
+    loaded = _read_source(source_path)
+    if loaded is None:
+        return 1
+    _, text = loaded
+    try:
+        from sotlas.studio import StudioHandler
+        handler = StudioHandler.__new__(StudioHandler)
+        res = handler.compile_source_all_backends(text)
+        if res.get("status") == "ok":
+            print(res.get("wasm", ""))
+            return 0
+        else:
+            print(f"sotlas: erro ao emitir WebAssembly: {res.get('error')}", file=sys.stderr)
+            return 1
+    except Exception as error:
+        print(f"sotlas: erro ao emitir WebAssembly: {error}", file=sys.stderr)
+        return 1
+
+
 def _run_fmt(args) -> int:
     target = Path(args.target)
     from sotlas.formatter import format_file
@@ -329,17 +392,52 @@ def _run_compile(args) -> int:
         print(f"sotlas: erro: {error}", file=sys.stderr)
         return 1
 
+    emit_type = "exe"
+    if getattr(args, "emit_llvm", False) or (args.output and str(args.output).endswith(".ll")):
+        emit_type = "llvm"
+    elif getattr(args, "emit_obj", False) or (args.output and str(args.output).endswith((".o", ".obj"))):
+        emit_type = "obj"
+    elif getattr(args, "emit_c", False) or (args.output and str(args.output).endswith(".c")):
+        emit_type = "c"
+
+    from sotlas.llvm_toolchain import default_toolchain
+    is_llvm = default_toolchain.is_available() and (args.backend == "llvm" or emit_type in ("obj", "llvm"))
+
     if args.output:
         out_path = Path(args.output)
     else:
-        out_path = src.with_suffix(".bin" if not args.emit_c else ".c")
+        suffix_map = {
+            "llvm": ".ll",
+            "obj": ".obj" if sys.platform == "win32" else ".o",
+            "c": ".c",
+            "exe": ".exe" if sys.platform == "win32" else ".bin"
+        }
+        out_path = src.with_suffix(suffix_map.get(emit_type, ".bin"))
 
-    if args.emit_c:
+    if emit_type == "c":
         c_path = out_path.with_suffix(".c")
         c_path.write_text(c_code, encoding="utf-8")
         print(f"sotlas: C11 emitido em {c_path}")
         return 0
 
+    if is_llvm:
+        is_freestanding = (args.target == "x86_64-freestanding")
+        try:
+            res_path = default_toolchain.compile_source_to_native(
+                text,
+                args.source,
+                out_path,
+                emit_type=emit_type,
+                backend="c11",
+                is_freestanding=is_freestanding
+            )
+            print(f"sotlas: {emit_type.upper()} gerado via LLVM em {res_path}")
+            return 0
+        except Exception as err:
+            print(f"sotlas: erro LLVM: {err}", file=sys.stderr)
+            return 1
+
+    # Fallback para GCC clássico quando LLVM não estiver ativo
     c_file = out_path.with_suffix(".c")
     c_file.write_text(c_code, encoding="utf-8")
 
@@ -372,6 +470,18 @@ def _run_exec(args) -> int:
         return 1
     src, text = loaded
 
+    from sotlas.llvm_toolchain import default_toolchain
+    if default_toolchain.is_available():
+        with tempfile.TemporaryDirectory() as tmpdir:
+            exe_path = Path(tmpdir) / ("test.exe" if sys.platform == "win32" else "test.bin")
+            try:
+                default_toolchain.compile_source_to_native(text, args.source, exe_path, emit_type="exe", backend="c11")
+                run_res = subprocess.run([str(exe_path)])
+                return run_res.returncode
+            except Exception as e:
+                print(f"sotlas run: erro LLVM: {e}", file=sys.stderr)
+                return 1
+
     try:
         c_code = compile_source(text, args.source)
     except SotlasBootstrapError as error:
@@ -393,6 +503,26 @@ def _run_exec(args) -> int:
     finally:
         c_file.unlink(missing_ok=True)
         exe_path.unlink(missing_ok=True)
+
+
+def _run_bootstrap(args) -> int:
+    from sotlas.bootstrap_pipeline import build_self_hosted_compiler, verify_self_hosted_compiler
+    out = Path(args.output) if args.output else None
+    try:
+        exe = build_self_hosted_compiler(out)
+        print(f"sotlas: compilador nativo auto-hospedado gerado com sucesso: {exe}")
+        if not args.no_verify:
+            ok = verify_self_hosted_compiler(exe)
+            if ok:
+                print("sotlas: verificação do compilador auto-hospedado: OK (100% aprovado)")
+                return 0
+            else:
+                print("sotlas: erro na verificação do compilador auto-hospedado", file=sys.stderr)
+                return 1
+        return 0
+    except Exception as e:
+        print(f"sotlas bootstrap: erro: {e}", file=sys.stderr)
+        return 1
 
 
 def _run_lsp() -> int:

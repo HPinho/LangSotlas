@@ -23,6 +23,13 @@ pub enum TokenKind {
     KwWhile,
     KwSystem,
 
+    // Palavras-chave Proprietárias Exclusivas de Sotlas
+    KwDiscern,
+    KwForge,
+    KwEnclave,
+    KwProbe,
+    KwPulse,
+
     // Operadores e Pontuação
     Plus,
     Minus,

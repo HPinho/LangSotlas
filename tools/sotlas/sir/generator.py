@@ -41,8 +41,13 @@ class SIRGenerator:
     def _lower_function(self, fn: Any) -> SIRFunction:
         fn_name = getattr(fn, "name", "anonymous")
         params = getattr(fn, "params", [])
-        ret_type = getattr(fn, "ret", None)
-        ret_str = getattr(ret_type, "name", "void") if ret_type else "void"
+        ret_type = getattr(fn, "ret", None) or getattr(fn, "result", None) or getattr(fn, "return_type", None)
+        if isinstance(ret_type, str):
+            ret_str = ret_type
+        elif hasattr(ret_type, "name"):
+            ret_str = ret_type.name
+        else:
+            ret_str = "void"
         directives = getattr(fn, "directives", []) or []
         dir_names = [getattr(d, "name", "") for d in directives]
         attrs = getattr(fn, "attributes", []) or []

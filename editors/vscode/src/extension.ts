@@ -70,6 +70,32 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
+        vscode.commands.registerCommand('sotlas.studio', async () => {
+            const terminal = vscode.window.createTerminal('Sotlas Studio');
+            terminal.show();
+            terminal.sendText(`${compilerPath} studio`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('sotlas.repl', async () => {
+            const terminal = vscode.window.createTerminal('Sotlas REPL');
+            terminal.show();
+            terminal.sendText(`${compilerPath} repl`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('sotlas.dumpWasm', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+            const terminal = vscode.window.createTerminal('Sotlas Wasm');
+            terminal.show();
+            terminal.sendText(`${compilerPath} compile "${editor.document.fileName}" --emit-wasm`);
+        })
+    );
+
+    context.subscriptions.push(
         vscode.commands.registerCommand('sotlas.restartServer', async () => {
             if (client) {
                 await client.stop();

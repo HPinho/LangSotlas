@@ -62,15 +62,15 @@
       "patterns": [
         {
           "name": "keyword.control.sotlas",
-          "match": "\\b(if|else|for|while|return|break|continue|in|match|guard|defer)\\b"
+          "match": "\\b(if|else|for|while|return|break|continue|in|match|discern|guard|defer)\\b"
         },
         {
           "name": "keyword.declaration.sotlas",
-          "match": "\\b(module|import|pub|priv|internal|fn|trapfn|struct|enum|class|mesh|spec|adopts|moldable|reshape|barecore|const|static|let|var|unsafe|as|where)\\b"
+          "match": "\\b(module|import|pub|priv|internal|fn|trapfn|struct|enum|class|mesh|spec|adopts|moldable|reshape|barecore|const|static|let|var|unsafe|forge|enclave|as|where)\\b"
         },
         {
           "name": "keyword.srg.sotlas",
-          "match": "\\b(handover|quarantine|rebound|clinch|revert|quench|gate|emit)\\b"
+          "match": "\\b(handover|quarantine|rebound|clinch|revert|quench|gate|emit|probe|pulse)\\b"
         }
       ]
     },
@@ -106,7 +106,7 @@
         },
         {
           "name": "support.type.sotlas",
-          "match": "\\b(Int8|Int16|Int32|Int64|UInt8|UInt16|UInt32|UInt64|Float32|Float64|USize|ISize|Bool|Void|String)\\b"
+          "match": "\\b(Int8|Int16|Int32|Int64|UInt8|UInt16|UInt32|UInt64|Float32|Float64|USize|ISize|Bool|Void|String|SpinLock|Enclave|Vec|Option|Result)\\b"
         }
       ]
     },

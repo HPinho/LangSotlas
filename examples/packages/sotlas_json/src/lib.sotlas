@@ -1,0 +1,65 @@
+module sotlas_json::lib;
+
+// Tipos de valores JSON em Sotlas
+pub enum JsonValueKind {
+    Null,
+    Bool,
+    Number,
+    String,
+    Array,
+    Object,
+}
+
+pub struct JsonValue {
+    pub kind: JsonValueKind;
+    pub num_val: i64;
+    pub bool_val: bool;
+
+    pub fn new_null() -> JsonValue {
+        return JsonValue {
+            kind: JsonValueKind::Null,
+            num_val: 0,
+            bool_val: false,
+        };
+    }
+
+    pub fn new_number(n: i64) -> JsonValue {
+        return JsonValue {
+            kind: JsonValueKind::Number,
+            num_val: n,
+            bool_val: false,
+        };
+    }
+
+    pub fn new_bool(b: bool) -> JsonValue {
+        return JsonValue {
+            kind: JsonValueKind::Bool,
+            num_val: 0,
+            bool_val: b,
+        };
+    }
+
+    pub fn is_null(self) -> bool {
+        discern self.kind {
+            case .Null => {
+                return true;
+            }
+            case else => {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    pub fn as_number(self) -> i64 {
+        discern self.kind {
+            case .Number => {
+                return self.num_val;
+            }
+            case else => {
+                return 0;
+            }
+        }
+        return 0;
+    }
+}
