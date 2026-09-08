@@ -106,6 +106,7 @@ class Sema:
         self._is_barecore = ast.is_barecore
         # Rastreamento SRG: nomes de variáveis 'island' atualmente activas
         self._island_vars: Set[str] = set()
+        self._unsafe_depth: int = 0
         self._errors: List[SotlasSemaError] = []
         self._warnings: List[str] = []
         # Quando True, identificadores não resolvidos são aceitos (campo de self implícito)
@@ -426,8 +427,12 @@ class Sema:
                 self._check_stmt(st, s)
         elif isinstance(stmt, UnsafeBlockNode):
             s = scope.child()
-            for st in stmt.body:
-                self._check_stmt(st, s)
+            self._unsafe_depth += 1
+            try:
+                for st in stmt.body:
+                    self._check_stmt(st, s)
+            finally:
+                self._unsafe_depth -= 1
         elif isinstance(stmt, ReturnNode):
             if stmt.value:
                 self._check_expr(stmt.value, scope)
@@ -463,6 +468,9 @@ class Sema:
     def _check_assignment(self, stmt: AssignmentNode, scope: Scope) -> None:
         self._check_expr(stmt.target, scope)
         self._check_expr(stmt.value, scope)
+        if isinstance(stmt.target, UnaryExprNode) and stmt.target.op == TK.STAR:
+            if self._unsafe_depth <= 0:
+                self._err("desreferenciamento de ponteiro cru exige bloco unsafe explícito", stmt.span)
         # Regra de segurança: rawphys ↔ virtmap ↔ dmazone não podem ser misturados sem cast
         if isinstance(stmt.target, IdentNode):
             dest_sym = scope.lookup(stmt.target.name)
@@ -561,6 +569,9 @@ class Sema:
             self._check_expr(expr.right, scope)
         elif isinstance(expr, UnaryExprNode):
             self._check_expr(expr.operand, scope)
+            if expr.op == TK.STAR:
+                if self._unsafe_depth <= 0:
+                    self._err("desreferenciamento de ponteiro cru exige bloco unsafe explícito", expr.span)
         elif isinstance(expr, CallExprNode):
             self._check_expr(expr.callee, scope)
             for arg in expr.args:
@@ -582,6 +593,9 @@ class Sema:
         elif isinstance(expr, CastExprNode):
             self._check_expr(expr.expr, scope)
             self._check_type(expr.target_type, expr.span)
+            if expr.target_type and (expr.target_type.is_topology_ptr or expr.target_type.topology_ptr):
+                if self._unsafe_depth <= 0:
+                    self._err("criação/conversão para ponteiro cru exige bloco unsafe explícito", expr.span)
         elif isinstance(expr, (OptionalChainExprNode, ForceUnwrapExprNode)):
             self._check_expr(expr.expr, scope)
         elif isinstance(expr, ArrayLitExprNode):

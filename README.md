@@ -64,6 +64,48 @@ Durante décadas, a engenharia de sistemas e desenvolvimento de sistemas operaci
 
 ---
 
+## 🌐 Arquitetura de Interoperabilidade em 3 Camadas (C, C++, Objective-C)
+
+> **Objetivo Formal de Interoperabilidade:**
+> *"Sotlas deve possuir uma ABI C estável e bidirecional, permitindo interoperabilidade incremental com C, assembly, Objective-C e outras linguagens capazes de consumir C ABI, mantendo toda memória externa e ponteiros FFI atrás de fronteiras explícitas unsafe."*
+
+Sotlas foi desenhado para superar as deficiências de linguagens legadas sem virar uma ilha isolada. A linguagem adota uma separação rigorosa em **3 camadas ortogonais**:
+
+```text
+                ┌──────────────────────────────────────┐
+                │          Sotlas Safe Layer           │
+                │ Objects / Arrays / Optionals / UI    │
+                │ Totalmente segura e sem ponteiros crus│
+                └──────────────────┬───────────────────┘
+                                   │
+                           explicit @system
+                                   │
+                ┌──────────────────▼───────────────────┐
+                │        Sotlas Systems Layer          │
+                │ Pointers / MMIO / DMA / Interrupts   │
+                │ Isolamento de hardware do BakenOS    │
+                └──────────────────┬───────────────────┘
+                                   │
+                              extern "C"
+                                   │
+            ┌──────────────────────▼──────────────────────┐
+            │       C / C++ (extern "C") / Objective-C    │
+            │          Assembly & Firmware                │
+            │ Memória externa não confiável (unsafe)      │
+            └─────────────────────────────────────────────┘
+```
+
+### O Pipeline da Fronteira Perigosa:
+```text
+Objective-C / C / C++ ──► [Unsafe Boundary] ──► Sotlas Systems ──► [Safe Abstractions] ──► Sotlas Safe Layer
+```
+
+- **Guardrails no Estilo Rust**: `0xDEADBEEF as *mut u32` e desreferenciamento `*ptr` são rejeitados pelo compilador fora de blocos `unsafe { ... }`.
+- **Fronteira FFI Explícita**: Funções em `extern "C"` que manipulam ponteiros crus carregam risco explícito e são consumidas exclusivamente sob blocos `unsafe` na camada `@system`.
+- **Zero Overhead no Kernel**: Sem runtime de *nil-messaging* ou lookups dinâmicos de seletores do Objective-C dentro do kernel; a interoperação é feita via bridges C ABI diretas e sem custo oculto.
+
+---
+
 ## 🏗️ Arquitetura do Compilador
 
 O compilador Sotlas adota uma arquitetura em camadas estritas com representação intermediária em formato SSA (**SIR — Sotlas Intermediate Representation**):

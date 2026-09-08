@@ -287,3 +287,10 @@ Código do kernel deve seguir a seguinte disciplina:
 
 O objetivo não é impedir programação bare-metal. É tornar cada ponto em que o
 compilador deixa de poder provar segurança **visível, auditável e local**.
+
+## 11. Interoperabilidade C / C++ / Objective-C
+
+Para detalhes completos de arquitetura, contratos de ABI bidirecional e shims de interoperabilidade com C, C++ e Objective-C, consulte:
+- [Guia de Interoperabilidade C / C++ / Objective-C](interop_c_cpp_objc.md)
+- Cabeçalho canônico C ABI: [`include/sotlas/sotlas_abi.h`](../include/sotlas/sotlas_abi.h)
+- Exemplo completo de 3 camadas: [`examples/05_c_cpp_objc_interop/main.sotlas`](../examples/05_c_cpp_objc_interop/main.sotlas)

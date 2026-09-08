@@ -1,0 +1,98 @@
+// =============================================================================
+// Sotlas 3-Layer Interoperability Architecture: C / C++ / Objective-C
+// =============================================================================
+//
+// Este exemplo demonstra o isolamento rigoroso entre as camadas de software:
+//
+// 1. Safe Layer (Objetos, Optionals, UI, Aplicações):
+//    - Zero ponteiros crus, zero código unsafe.
+//
+// 2. Systems Layer (@system):
+//    - Encapsula a fronteira de risco e orquestra hardware/FFI.
+//
+// 3. Foreign FFI Layer (extern "C"):
+//    - Declarações externas marcadas como 'unsafe fn'.
+//    - Todo ponteiro retornado é não-gerenciado e seu uso exige 'unsafe { ... }'.
+// =============================================================================
+
+module interop::c_cpp_objc;
+
+// -----------------------------------------------------------------------------
+// CAMADA 3: Foreign FFI Boundary (C / C++ / Objective-C)
+// -----------------------------------------------------------------------------
+// Toda assinatura externa declara explicitamente o risco ao compilador Sotlas.
+extern "C" {
+    // Função de biblioteca legada em C/C++ que aloca e mapeia buffer de hardware
+    unsafe fn legacy_device_read(channel: u32, out_len: *mut usize) -> *mut u8;
+    
+    // Função externa em Objective-C / C que recebe notificação
+    unsafe fn legacy_notify_host(code: i32) -> void;
+}
+
+// -----------------------------------------------------------------------------
+// CAMADA 2: Sotlas Systems Layer (@system)
+// -----------------------------------------------------------------------------
+// A camada @system encapsula o risco e converte memória externa não-gerenciada
+// em estruturas estritamente seguras antes de expô-las à aplicação.
+
+pub struct SafePacket {
+    pub channel: u32;
+    pub length: usize;
+    pub checksum: u32;
+}
+
+@system
+pub fn probe_and_encapsulate(channel: u32) -> SafePacket {
+    let mut out_len: usize = 0;
+    
+    // REGRA DE GUARDRAIL:
+    // Chamadas a funções FFI externas exigem bloco 'unsafe { ... }' explícito.
+    let raw_buffer: *mut u8 = unsafe {
+        legacy_device_read(channel, &mut out_len as *mut usize)
+    };
+    
+    let mut computed_sum: u32 = 0;
+    
+    // REGRA DE GUARDRAIL:
+    // Desreferenciar ou indexar ponteiro cru externo exige 'unsafe { ... }'.
+    unsafe {
+        if raw_buffer != (null as *mut u8) && out_len > 0 {
+            computed_sum = raw_buffer[0] as u32;
+        }
+    }
+    
+    // Notificação de volta para o host externo
+    unsafe {
+        legacy_notify_host(0);
+    }
+    
+    // Retorna abstração 100% segura para a camada de aplicação
+    return SafePacket {
+        channel: channel,
+        length: out_len,
+        checksum: computed_sum,
+    };
+}
+
+// -----------------------------------------------------------------------------
+// CAMADA 1: Sotlas Safe Layer (Aplicações, Drivers de Alto Nível, UI)
+// -----------------------------------------------------------------------------
+// Não contém nenhum ponteiro cru nem bloco unsafe.
+
+pub fn handle_application_event(channel: u32) -> u32 {
+    let packet = probe_and_encapsulate(channel);
+    
+    if packet.length > 0 {
+        return packet.checksum + 100;
+    }
+    return 0;
+}
+
+// -----------------------------------------------------------------------------
+// EXPORTAÇÃO BIDIRECIONAL: Sotlas exportando ABI C estável
+// -----------------------------------------------------------------------------
+// Permite que C, C++ ou Objective-C invoquem Sotlas diretamente sem runtime.
+@export
+pub fn sotlas_entry_process(channel: u32) -> u32 {
+    return handle_application_event(channel);
+}

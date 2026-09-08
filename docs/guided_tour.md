@@ -155,3 +155,38 @@ sotlas compile main.sotlas --target x86_64-freestanding
 # Executar a suíte completa de testes
 sotlas test
 ```
+
+---
+
+## 7. Interoperabilidade em 3 Camadas (C, C++, Objective-C)
+
+Sotlas foi desenhado para interoperar de forma nativa e bidirecional com C, C++ e Objective-C através da ABI C padrão, **sem adotar o modelo permissivo de ponteiros soltos e nil-messaging**:
+
+```text
+                ┌──────────────────────────────────────┐
+                │          Sotlas Safe Layer           │
+                │ Objects / Arrays / Optionals / UI    │
+                │ Totalmente segura e sem ponteiros crus│
+                └──────────────────┬───────────────────┘
+                                   │
+                           explicit @system
+                                   │
+                ┌──────────────────▼───────────────────┐
+                │        Sotlas Systems Layer          │
+                │ Pointers / MMIO / DMA / Interrupts   │
+                │ Isolamento de hardware do BakenOS    │
+                └──────────────────┬───────────────────┘
+                                   │
+                              extern "C"
+                                   │
+            ┌──────────────────────▼──────────────────────┐
+            │       C / C++ (extern "C") / Objective-C    │
+            │          Assembly & Firmware                │
+            │ Memória externa não confiável (unsafe)      │
+            └─────────────────────────────────────────────┘
+```
+
+Operações perigosas sobre ponteiros crus (como `0xDEADBEEF as *mut u32` ou `*ptr = 42;`) são **proibidas fora de blocos `unsafe { ... }`**. A camada `@system` atua como guardião, encapsulando dados externos em abstrações seguras (`SafePacket`, `ByteSlice`, `Option`) antes de entregá-los à aplicação.
+
+Para detalhes completos, consulte o [Guia de Interoperabilidade C / C++ / Objective-C](interop_c_cpp_objc.md).
+

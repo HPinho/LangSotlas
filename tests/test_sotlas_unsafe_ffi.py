@@ -5,6 +5,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from tools.sotlas_compile import bootstrap
 
@@ -266,6 +267,69 @@ extern "Objective-C" fn objc_msg_send() -> u64;
             "ABI externa não suportada",
         ):
             bootstrap.parse(source, filename="<unsafe-ffi>")
+
+
+class TestRichFrontendUnsafeGuardrails(unittest.TestCase):
+    def test_rich_sema_rejects_raw_deref_outside_unsafe(self):
+        from sotlas.lexer import Lexer
+        from sotlas.parser import Parser
+        from sotlas.sema import Sema, SotlasSemaError
+        src = """module x;
+        fn write(ptr: *rawphys UInt32) -> Void {
+            *ptr = 42;
+        }
+        """
+        tokens = Lexer(src, "<test>").tokenize()
+        ast = Parser(tokens, "<test>").parse()
+        with self.assertRaises(SotlasSemaError) as ctx:
+            Sema(ast, "<test>").check()
+        self.assertIn("desreferenciamento de ponteiro cru exige bloco unsafe", str(ctx.exception))
+
+    def test_rich_sema_accepts_raw_deref_inside_unsafe(self):
+        from sotlas.lexer import Lexer
+        from sotlas.parser import Parser
+        from sotlas.sema import Sema
+        src = """module x;
+        fn write(ptr: *rawphys UInt32) -> Void {
+            unsafe {
+                *ptr = 42;
+            }
+        }
+        """
+        tokens = Lexer(src, "<test>").tokenize()
+        ast = Parser(tokens, "<test>").parse()
+        Sema(ast, "<test>").check()
+
+    def test_rich_sema_rejects_integer_to_rawphys_cast_outside_unsafe(self):
+        from sotlas.lexer import Lexer
+        from sotlas.parser import Parser
+        from sotlas.sema import Sema, SotlasSemaError
+        src = """module x;
+        fn map_mmio() -> Void {
+            let ptr: *rawphys UInt32 = 0xDEADBEEF as *rawphys UInt32;
+        }
+        """
+        tokens = Lexer(src, "<test>").tokenize()
+        ast = Parser(tokens, "<test>").parse()
+        with self.assertRaises(SotlasSemaError) as ctx:
+            Sema(ast, "<test>").check()
+        self.assertIn("conversão para ponteiro cru exige bloco unsafe", str(ctx.exception))
+
+    def test_rich_sema_accepts_integer_to_rawphys_cast_inside_unsafe(self):
+        from sotlas.lexer import Lexer
+        from sotlas.parser import Parser
+        from sotlas.sema import Sema
+        src = """module x;
+        fn map_mmio() -> Void {
+            unsafe {
+                let ptr: *rawphys UInt32 = 0xDEADBEEF as *rawphys UInt32;
+                *ptr = 42;
+            }
+        }
+        """
+        tokens = Lexer(src, "<test>").tokenize()
+        ast = Parser(tokens, "<test>").parse()
+        Sema(ast, "<test>").check()
 
 
 if __name__ == "__main__":
