@@ -247,20 +247,32 @@ pub fn flush_screen_buffer() {
 O compilador Sotlas é submetido a uma suíte exaustiva de testes contínuos para garantir **zero regressões** no kernel do BakenOS:
 
 ```bash
-# Executar todos os 285 testes unitários e de integração
+# Executar todos os 298 testes unitários e de integração
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Cobertura dos 285 testes:
+Cobertura dos 298 testes:
 - Lexer, Spans e Resiliência
 - Parser, AST e Gramática Formal EBNF
-- Análise Semântica e Checagem de Tipos
+- Análise Semântica e Checagem de Tipos (3 Camadas de Isolamento)
 - Modelo Ortogonal de Segurança (`@system` e `unsafe`)
-- Representação Intermediária SIR e Passes de Definite Initialization
+- Representação Intermediária SIR e Passes de Otimização SSA
 - Lowering C11 e Geração de Código Estrito
+- Emissão de LLVM IR textual preliminar
 - Suporte a Classes, Métodos e ARC
 - Biblioteca Padrão (`stdlib/core` e `stdlib/system`)
+- Interoperabilidade Bidirecional em C ABI (`include/sotlas/sotlas_abi.h`)
 - Compatibilidade e Compilação Modular de 100% dos Módulos do Kernel BakenOS
+
+---
+
+## 📚 Documentação Adicional
+
+- [Guia da Linguagem (Guided Tour)](docs/guided_tour.md)
+- [Arquitetura do Compilador](docs/compiler_architecture.md)
+- [Segurança de Memória e FFI](docs/safety_and_ffi.md)
+- [Interoperabilidade C, C++ e Objective-C](docs/interop_c_cpp_objc.md)
+- [Análise de Ecossistema e Roteiro de Registro](docs/ecosystem_and_registration_roadmap.md)
 
 ---
 

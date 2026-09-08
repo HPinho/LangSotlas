@@ -1,0 +1,6 @@
+# Auto-detect text files and perform LF normalization
+* text=auto
+
+# GitHub Linguist language detection and syntax highlighting
+*.sotlas linguist-language=Rust linguist-detectable=true
+*.sth    linguist-language=C    linguist-detectable=true
