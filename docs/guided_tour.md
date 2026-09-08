@@ -1,5 +1,9 @@
 # A Guided Tour of Sotlas
 
+<div align="center">
+  <img src="../assets/logo.svg" alt="Sotlas Logo" width="120" height="120" />
+</div>
+
 Bem-vindo ao tour guiado da linguagem **Sotlas**. Projetada para superar as lacunas históricas de segurança, modularidade e controle deixadas pelo C, C++ e Objective-C, Sotlas foi construída sob o princípio:
 > *"Segura por padrão, assumidamente capaz de sistemas."*
 

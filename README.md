@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./assets/logo.svg" alt="Sotlas Logo" width="160" height="160" />
+
 # ⚡ Linguagem de Programação Sotlas
 
 **Segura por padrão, assumidamente capaz de sistemas.**  
@@ -9,7 +11,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Target](https://img.shields.io/badge/target-x86__64--freestanding-orange.svg)](#)
 [![Architecture](https://img.shields.io/badge/architecture-SIR%20%2F%20C11%20Stage--0-green.svg)](#)
-[![Language Version](https://img.shields.io/badge/version-0.2.0-purple.svg)](#)
+[![Language Version](https://img.shields.io/badge/version-0.3.0-purple.svg)](#)
 
 [Visão Geral](#-visão-geral) • [Por que Sotlas?](#-por-que-sotlas-superando-c-c-e-objective-c) • [Tour Guiado](docs/guided_tour.md) • [Arquitetura](#-arquitetura-do-compilador) • [Biblioteca Padrão](#-biblioteca-padrão-stdlib) • [Quickstart](#-quickstart) • [Exemplos](examples/)
 
