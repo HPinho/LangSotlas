@@ -74,4 +74,5 @@ code --install-extension baken-sotlas-0.3.0.vsix
 
 ## Licenca
 
-Distribuido sob a licenca MIT.
+Distribuido sob a licenca Apache 2.0 com LLVM Exception.
+Copyright (c) 2026 Tastetrack Systems LTDA e contribuidores do projeto Sotlas.

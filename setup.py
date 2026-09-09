@@ -4,6 +4,8 @@ from setuptools import setup, find_packages
 setup(
     name="sotlas",
     version="0.2.0",
+    author="Tastetrack Systems LTDA",
+    license="Apache-2.0 WITH LLVM-exception",
     package_dir={"": "compiler"},
     packages=find_packages(where="compiler"),
     entry_points={

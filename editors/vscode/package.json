@@ -1,7 +1,7 @@
 {
   "name": "baken-sotlas",
   "displayName": "Sotlas Language",
-  "publisher": "bakenos",
+  "publisher": "tastetrack",
   "description": "Suporte oficial à linguagem Sotlas: realce de sintaxe, LSP, diagnósticos e comandos de compilação",
   "version": "0.3.0",
   "icon": "./icons/sotlas-icon.png",
@@ -11,7 +11,7 @@
   "categories": [
     "Programming Languages"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0 WITH LLVM-exception",
   "repository": {
     "type": "git",
     "url": "https://github.com/HPinho/LangSotlas.git"

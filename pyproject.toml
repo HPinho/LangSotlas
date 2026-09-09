@@ -7,9 +7,9 @@ name = "sotlas"
 version = "0.2.0"
 description = "Sotlas Programming Language — Safe by default, unapologetically systems-capable"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = { text = "Apache-2.0 WITH LLVM-exception" }
 authors = [
-    { name = "Equipe Sotlas", email = "dev@bakenos.org" }
+    { name = "Tastetrack Systems LTDA" }
 ]
 keywords = ["compiler", "systems-programming", "operating-systems", "freestanding", "memory-safety", "type-safety"]
 classifiers = [
