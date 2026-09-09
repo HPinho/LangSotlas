@@ -1,6 +1,9 @@
 module system::intrinsics;
 
+// ============================================================================
 // Port I/O x86_64
+// ============================================================================
+
 @system
 pub fn inb(port: u16) -> u8 {
     let mut val: u8 = 0;
@@ -49,7 +52,10 @@ pub fn outl(port: u16, val: u32) {
     }
 }
 
+// ============================================================================
 // Controle de interrupções e CPU
+// ============================================================================
+
 @system
 pub fn cli() {
     unsafe {
@@ -75,5 +81,51 @@ pub fn hlt() {
 pub fn memory_barrier() {
     unsafe {
         __asm__ volatile ("" : : : "memory");
+    }
+}
+
+// ============================================================================
+// IRQ save/restore — Interface de primeiro nível para seções críticas
+// ============================================================================
+//
+// Estes wrappers delegam aos intrínsecos do backend x86-64 que usam
+// pushfq/popfq para salvar e restaurar o estado completo das RFLAGS,
+// incluindo o Interrupt Flag (IF).
+//
+// PADRÃO CORRETO para seções críticas no kernel:
+//
+//   let flags = irq_save_disable();
+//   // ... seção crítica (interrupções desabilitadas) ...
+//   irq_restore(flags);
+//
+// Este padrão é seguro para NESTING: se as interrupções já estavam
+// desabilitadas antes da chamada, irq_restore() NÃO as habilitará.
+//
+// NÃO use cli()/sti() diretamente — eles quebram nesting.
+
+// Salva RFLAGS e desabilita interrupções. Retorna as flags salvas.
+@system
+pub fn irq_save_disable() -> u64 {
+    unsafe {
+        return __irq_save_disable();
+    }
+}
+
+// Restaura RFLAGS salvas anteriormente, incluindo o estado de IF.
+// Se as interrupções estavam habilitadas quando irq_save_disable() foi
+// chamado, elas serão re-habilitadas; se estavam desabilitadas, continuarão
+// desabilitadas.
+@system
+pub fn irq_restore(flags: u64) {
+    unsafe {
+        __irq_restore(flags);
+    }
+}
+
+// Verifica se as interrupções estão atualmente habilitadas.
+@system
+pub fn interrupts_enabled() -> bool {
+    unsafe {
+        return __interrupts_enabled();
     }
 }

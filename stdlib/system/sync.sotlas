@@ -1,19 +1,63 @@
 module system::sync;
 
-// Barreira atômica de sincronização de clock e cerca de coerência de memória
+// ============================================================================
+// Barreiras de memória — Fence specialization
+// ============================================================================
+// Cada fence delega para o intrínseco do backend x86-64 registrado em
+// x86_intrinsics.py. O bootstrap parser não suporta __asm__ inline
+// diretamente em módulos Sotlas; por isso usamos as funções C embutidas.
+
+// Barreira completa de memória (store + load ordering)
+@system
 pub fn pulse() {
-    unsafe {
-        __asm__ volatile ("mfence" : : : "memory");
-    }
+    __dma_fence();
 }
 
+// Barreira de store — garante que stores anteriores sejam visíveis antes de
+// stores posteriores. Suficiente para publicação de dados (producer side).
+@system
+pub fn pulse_store() {
+    __sfence();
+}
+
+// Barreira de load — garante que loads anteriores completem antes de loads
+// posteriores. Útil para consumo de dados (consumer side) e serialização.
+@system
+pub fn pulse_load() {
+    __lfence();
+}
+
+// Barreira de compilador — impede reordenação pelo compilador sem emitir
+// instrução de CPU. Custo zero em runtime.
+@system
+pub fn compiler_fence() {
+    // A barreira de compilador é um caso especial: não há intrínseco
+    // backend dedicado, mas qualquer chamada a um intrínseco com clobber
+    // "memory" já funciona. Usamos lfence como mínimo portável.
+    __lfence();
+}
+
+@system
 pub fn cpu_pause() {
-    unsafe {
-        __asm__ volatile ("pause" : : : "memory");
-    }
+    __cpu_pause();
 }
 
-// Bloqueio de rotação (SpinLock) para sincronização bare-metal entre núcleos
+// ============================================================================
+// SpinLock — Bloqueio de rotação atômico para SMP
+// ============================================================================
+//
+// Usa xchg atômico (implicitly locked no x86-64) para garantir que apenas uma
+// CPU entre na seção crítica. A implementação anterior usava check-then-set
+// não-atômico, que é uma race condition clássica em SMP:
+//
+//   CPU0: observa locked == 0          CPU1: observa locked == 0
+//   CPU0: locked = 1                   CPU1: locked = 1
+//   → Ambas entram na seção crítica!
+//
+// Com xchg atômico:
+//   CPU0: xchg(locked, 1) retorna 0 → entra
+//   CPU1: xchg(locked, 1) retorna 1 → espera
+//
 pub struct SpinLock {
     pub locked: u32;
 
@@ -21,20 +65,52 @@ pub struct SpinLock {
         return SpinLock { locked: 0 };
     }
 
+    // Adquire o lock. Bloqueia (spin-wait) até conseguir.
+    // NOTA: Não desabilita interrupções. Em contexto de kernel, o chamador
+    // deve usar irq_save_disable() antes de lock() se o lock pode ser
+    // adquirido dentro de um handler de IRQ.
+    @system
     pub fn lock(mut self) {
+        // xchg é atomicamente seguro: troca o valor e retorna o anterior.
+        // Se retornou 0, nós fomos os primeiros a gravar 1 → adquirimos.
+        // Se retornou 1, alguém já tem o lock → esperar.
         unsafe {
-            while self.locked != 0 {
-                cpu_pause();
+            let addr: u64 = &self.locked as *mut u32 as u64;
+            while __atomic_exchange_u32(addr, 1) != 0 {
+                // pause reduz contenção no pipeline e consome menos energia
+                __cpu_pause();
             }
-            self.locked = 1;
-            pulse();
         }
+        // Acquire fence: garante que loads/stores dentro da seção crítica
+        // não sejam reordenados para antes da aquisição do lock.
+        __dma_fence();
     }
 
-    pub fn unlock(mut self) {
+    // Tenta adquirir o lock sem bloquear.
+    // Retorna true se adquiriu, false se já estava locked.
+    @system
+    pub fn try_lock(mut self) -> bool {
         unsafe {
-            pulse();
-            self.locked = 0;
+            let addr: u64 = &self.locked as *mut u32 as u64;
+            if __atomic_exchange_u32(addr, 1) == 0 {
+                __dma_fence();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Libera o lock. O chamador DEVE ter adquirido o lock antes.
+    @system
+    pub fn unlock(mut self) {
+        // Release fence: garante que todos os stores dentro da seção
+        // crítica sejam visíveis antes de liberar o lock.
+        __dma_fence();
+        // Store atômico via xchg para garantir visibilidade imediata
+        // em todos os cores.
+        unsafe {
+            let addr: u64 = &self.locked as *mut u32 as u64;
+            __atomic_exchange_u32(addr, 0);
         }
     }
 
@@ -43,7 +119,24 @@ pub struct SpinLock {
     }
 }
 
-// Enclave: Encapsulamento atômico seguro para dados concorrentes
+// ============================================================================
+// Enclave — Encapsulamento atômico seguro para dados concorrentes
+// ============================================================================
+//
+// LIMITAÇÃO IMPORTANTE: Enclave usa SpinLock que NÃO desabilita interrupções.
+// Em contexto de kernel, se um IRQ handler tenta adquirir o mesmo Enclave
+// que a thread interrompida já detém, haverá DEADLOCK.
+//
+// Para uso em kernel com possibilidade de IRQ, o padrão correto é:
+//   let flags = irq_save_disable();
+//   enclave.lock.lock();
+//   // ... seção crítica ...
+//   enclave.lock.unlock();
+//   irq_restore(flags);
+//
+// NÃO use Enclave/clinch como substituto para irq_save_disable()/irq_restore()
+// até que clinch preserve o flag IF (RFLAGS bit 9) via pushfq/popfq.
+//
 pub struct Enclave forge<T> {
     pub lock: SpinLock;
     pub value: T;

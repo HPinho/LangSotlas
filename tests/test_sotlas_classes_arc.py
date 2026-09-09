@@ -87,7 +87,7 @@ class SotlasClassesAndArcTests(unittest.TestCase):
             self.assertEqual(res.returncode, 0, f"Erro GCC core::{subpath}: {res.stderr}")
 
     def test_runtime_class_and_arc_execution(self):
-        test_source = ROOT / "bootstrap" / "sotlas" / "test_runtime_app.sotlas"
+        test_source = ROOT / "bootstrap" / "sotlas" / "test_arc_runtime_temp.sotlas"
         test_source.write_text("""
         module app::test;
         import core::mem::*;

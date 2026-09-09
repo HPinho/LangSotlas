@@ -133,9 +133,45 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                    str_eq(txt_ptr, "null") || str_eq(txt_ptr, "true") || str_eq(txt_ptr, "false") ||
                    str_eq(txt_ptr, "match") || str_eq(txt_ptr, "loop") ||
                    str_eq(txt_ptr, "break") || str_eq(txt_ptr, "continue") ||
-                   str_eq(txt_ptr, "defer") {
+                   str_eq(txt_ptr, "defer") || str_eq(txt_ptr, "for") ||
+                   str_eq(txt_ptr, "in") || str_eq(txt_ptr, "class") ||
+                   str_eq(txt_ptr, "self") || str_eq(txt_ptr, "asm") ||
+                   str_eq(txt_ptr, "volatile") {
                     tok.kind = TokenKind::Keyword;
                 }
+                tokens[tok_count] = tok;
+                tok_count = tok_count + 1;
+            }
+            // Literal de caractere '...'
+            else if ch == 39 {
+                let start_col: u32 = col;
+                let start_i: usize = i;
+                i = i + 1;
+                col = col + 1;
+                while src[i] != 0 && src[i] != 39 {
+                    if src[i] == 92 && src[i + 1] != 0 {
+                        i = i + 2;
+                        col = col + 2;
+                    } else {
+                        i = i + 1;
+                        col = col + 1;
+                    }
+                }
+                if src[i] == 39 {
+                    i = i + 1;
+                    col = col + 1;
+                }
+                let len: usize = i - start_i;
+                let mut tok: Token = 0;
+                tok.kind = TokenKind::Number;
+                tok.line = line;
+                tok.col = start_col;
+                let mut k: usize = 0;
+                while k < len && k < 63 {
+                    tok.text[k] = src[start_i + k];
+                    k = k + 1;
+                }
+                tok.text[k] = 0;
                 tokens[tok_count] = tok;
                 tok_count = tok_count + 1;
             }
@@ -170,12 +206,15 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                 tokens[tok_count] = tok;
                 tok_count = tok_count + 1;
             }
-            // Símbolos multi-char (:: -> == != <= >= && || << >>)
+            // Símbolos multi-char (:: -> == != <= >= && || << >> += -= *= /= &= |=)
             else if (ch == 58 && src[i + 1] == 58) || (ch == 45 && src[i + 1] == 62) ||
                     (ch == 61 && src[i + 1] == 61) || (ch == 33 && src[i + 1] == 61) ||
                     (ch == 60 && src[i + 1] == 61) || (ch == 62 && src[i + 1] == 61) ||
                     (ch == 38 && src[i + 1] == 38) || (ch == 124 && src[i + 1] == 124) ||
-                    (ch == 60 && src[i + 1] == 60) || (ch == 62 && src[i + 1] == 62) {
+                    (ch == 60 && src[i + 1] == 60) || (ch == 62 && src[i + 1] == 62) ||
+                    (ch == 43 && src[i + 1] == 61) || (ch == 45 && src[i + 1] == 61) ||
+                    (ch == 42 && src[i + 1] == 61) || (ch == 47 && src[i + 1] == 61) ||
+                    (ch == 38 && src[i + 1] == 61) || (ch == 124 && src[i + 1] == 61) {
                 let mut tok: Token = 0;
                 tok.kind = TokenKind::Symbol;
                 tok.line = line;

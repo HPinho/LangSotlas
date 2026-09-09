@@ -192,6 +192,19 @@ class Sema:
         self._collect_imported_symbols()
         for builtin_t in ("Enclave", "SpinLock", "Vec", "String", "Option", "Result", "Self"):
             self._global.define(Symbol(builtin_t, "type", None, Span(self._fn, 0, 0)))
+        for builtin_fn in (
+            "__dma_fence", "__sfence", "__lfence", "__cpu_pause",
+            "__atomic_exchange_u32", "__atomic_exchange_u64",
+            "__atomic_add_u64", "__atomic_add_u32", "__atomic_sub_u64", "__atomic_sub_u32",
+            "__atomic_load_u32", "__atomic_load_u64", "__atomic_store_u32", "__atomic_store_u64",
+            "__atomic_cmpxchg_u64", "__atomic_cmpxchg_u32",
+            "__irq_save_disable", "__irq_restore", "__interrupts_enabled",
+            "__outb", "__inb", "__outw", "__inw", "__outl", "__inl",
+            "__cli", "__sti", "__hlt", "__rdmsr", "__wrmsr",
+            "__read_cr0", "__write_cr0", "__read_cr2", "__read_cr3", "__write_cr3", "__read_cr4", "__write_cr4",
+            "__swapgs", "__read_gs_base", "__current_rsp", "__invlpg"
+        ):
+            self._global.define(Symbol(builtin_fn, "fn", None, Span(self._fn, 0, 0)))
         for decl in self._ast.decls:
             if isinstance(decl, (StructDeclNode, ClassDeclNode, MeshDeclNode,
                                  SpecDeclNode, EnumDeclNode)):
@@ -608,8 +621,8 @@ class Sema:
 
     def _check_expr(self, expr: ExprNode, scope: Scope) -> None:
         if isinstance(expr, IdentNode):
-            if expr.name in self._island_vars:
-                pass  # Acesso a island é válido dentro do escopo
+            if expr.name in self._island_vars or expr.name.startswith("__") or expr.name.startswith("baken_"):
+                pass  # Acesso a island ou intrínseco de sistema/hardware
             elif not expr.path and not scope.lookup(expr.name):
                 if not self._in_method:
                     # Fora de métodos de struct/classe: erro de símbolo não declarado

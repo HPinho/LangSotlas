@@ -319,6 +319,12 @@ class Defer(Stmt):
             raise ValueError("Defer must have either value or body")
         if self.value is not None and self.body is not None:
             raise ValueError("Defer cannot have both value and body")
+@dataclass
+class Asm(Stmt):
+    code: str
+    outputs: list[Expr] = field(default_factory=list)
+    inputs: list[Expr] = field(default_factory=list)
+    clobbers: list[str] = field(default_factory=list)
 
 @dataclass
 class FieldDef: name: str; type: Type
@@ -328,6 +334,7 @@ class Struct:
     fields: list[FieldDef]
     public: bool = False
     attributes: list[str] = field(default_factory=list)
+    methods: list[Function] = field(default_factory=list)
 
 @dataclass
 class Class:
@@ -467,7 +474,52 @@ class Parser:
                 self.at += 1
             inner = self.type()
             return Type(name=inner.name, pointer=True, mutable=mutable, is_array=inner.is_array, array_size=inner.array_size, elem_type=inner.elem_type)
-        return Type(self.ident(), pointer, mutable)
+        base_name = self.ident()
+        # Generics monomorfizados: forge<...> ou <...>
+        if (self.current.kind in ("forge", "IDENT") and self.current.text == "forge") or self.current.kind == "<":
+            if self.current.text == "forge": self.at += 1
+            if self.accept("<"):
+                depth = 1
+                while depth > 0 and self.current.kind != "EOF":
+                    if self.current.kind == "<": depth += 1
+                    elif self.current.kind == ">": depth -= 1
+                    self.at += 1
+        return Type(base_name, pointer, mutable)
+
+    def _parse_method(self, parent_name: str, member_pub: bool, member_attrs: list[str]) -> Function:
+        mname = self.ident()
+        self.expect("(")
+        mparams = []
+        if not self.accept(")"):
+            while True:
+                is_ref = False
+                is_mut = False
+                if self.accept("&"):
+                    is_ref = True
+                    if self.accept("mut"):
+                        is_mut = True
+                elif self.accept("mut"):
+                    is_mut = True
+
+                if self.current.kind == "IDENT" and self.current.text == "self":
+                    self.at += 1
+                    if self.accept(":"):
+                        ptype = self.type()
+                    else:
+                        ptype = Type(parent_name, pointer=is_ref, mutable=is_mut)
+                    mparams.append(("self", ptype))
+                else:
+                    pname = self.ident()
+                    self.expect(":")
+                    ptype = self.type()
+                    mparams.append((pname, ptype))
+                if self.accept(")"):
+                    break
+                self.expect(",")
+        mresult = self.type() if self.accept("->") else Type("void")
+        mbody = self.block()
+        fn_name = f"{parent_name}_{mname}"
+        return Function(fn_name, mparams, mresult, mbody, member_pub, member_attrs)
 
     def parse(self) -> Module:
         self.expect("module")
@@ -487,16 +539,15 @@ class Parser:
             public = bool(self.accept("pub"))
 
             if self.accept("struct"):
-                name = self.ident(); self.expect("{"); fields = []
-                while not self.accept("}"):
-                    self.accept("pub")
-                    fields.append(FieldDef(self.ident(), self._field_type()))
-                    self.expect(";")
-                module.structs.append(Struct(name, fields, public, attributes))
-                continue
-
-            if self.accept("class"):
                 name = self.ident()
+                if (self.current.kind in ("forge", "IDENT") and self.current.text == "forge") or self.current.kind == "<":
+                    if self.current.text == "forge": self.at += 1
+                    if self.accept("<"):
+                        depth = 1
+                        while depth > 0 and self.current.kind != "EOF":
+                            if self.current.kind == "<": depth += 1
+                            elif self.current.kind == ">": depth -= 1
+                            self.at += 1
                 self.expect("{")
                 fields = []
                 methods = []
@@ -506,28 +557,41 @@ class Parser:
                         member_attrs.append(self.accept("ATTR").text)
                     member_pub = bool(self.accept("pub"))
                     if self.accept("fn"):
-                        mname = self.ident()
-                        self.expect("(")
-                        mparams = []
-                        if not self.accept(")"):
-                            while True:
-                                pname = self.ident()
-                                self.expect(":")
-                                ptype = self.type()
-                                mparams.append((pname, ptype))
-                                if self.accept(")"):
-                                    break
-                                self.expect(",")
-                        mresult = self.type() if self.accept("->") else Type("void")
-                        mbody = self.block()
-                        fn_name = f"{name}_{mname}"
-                        methods.append(Function(fn_name, mparams, mresult, mbody, member_pub, member_attrs))
+                        methods.append(self._parse_method(name, member_pub, member_attrs))
+                    else:
+                        fields.append(FieldDef(self.ident(), self._field_type()))
+                        self.expect(";")
+                module.structs.append(Struct(name, fields, public, attributes, methods=methods))
+                for m in methods:
+                    module.functions.append(m)
+                continue
+
+            if self.accept("class"):
+                name = self.ident()
+                if (self.current.kind in ("forge", "IDENT") and self.current.text == "forge") or self.current.kind == "<":
+                    if self.current.text == "forge": self.at += 1
+                    if self.accept("<"):
+                        depth = 1
+                        while depth > 0 and self.current.kind != "EOF":
+                            if self.current.kind == "<": depth += 1
+                            elif self.current.kind == ">": depth -= 1
+                            self.at += 1
+                self.expect("{")
+                fields = []
+                methods = []
+                while not self.accept("}"):
+                    member_attrs: list[str] = []
+                    while self.current.kind == "ATTR":
+                        member_attrs.append(self.accept("ATTR").text)
+                    member_pub = bool(self.accept("pub"))
+                    if self.accept("fn"):
+                        methods.append(self._parse_method(name, member_pub, member_attrs))
                     else:
                         fields.append(FieldDef(self.ident(), self._field_type()))
                         self.expect(";")
                 cls = Class(name, fields, methods, public, attributes)
                 module.classes.append(cls)
-                module.structs.append(Struct(name, fields, public, attributes))
+                module.structs.append(Struct(name, fields, public, attributes, methods=methods))
                 for m in methods:
                     module.functions.append(m)
                 continue
@@ -648,6 +712,33 @@ class Parser:
                 self.expect(";")
                 return Defer(token, expr)
 
+        if (self.current.kind == "IDENT" and self.current.text in ("__asm__", "asm")) or self.accept("emit"):
+            tok = self.current
+            if self.current.kind == "IDENT":
+                self.at += 1
+            if self.current.kind == "IDENT" and self.current.text in ("volatile", "__volatile__"):
+                self.at += 1
+            self.expect("(")
+            asm_code = self.expect("STRING").text
+            outputs, inputs, clobbers = [], [], []
+            if self.accept(":"):
+                while self.current.kind not in (":", ")", "EOF"):
+                    outputs.append(self.expression())
+                    if not self.accept(","): break
+                if self.accept(":"):
+                    while self.current.kind not in (":", ")", "EOF"):
+                        inputs.append(self.expression())
+                        if not self.accept(","): break
+                    if self.accept(":"):
+                        while self.current.kind not in (")", "EOF"):
+                            if self.current.kind == "STRING":
+                                clobbers.append(self.current.text)
+                                self.at += 1
+                            if not self.accept(","): break
+            self.expect(")")
+            self.expect(";")
+            return Asm(tok, asm_code, outputs, inputs, clobbers)
+
         # Expressão ou Atribuição
         expr = self.expression()
         if self.accept("="):
@@ -739,6 +830,15 @@ class Parser:
         elif self._accept_ident_or_contextual():
             token = self.tokens[self.at - 1]
             name = token.text
+            # Optional generics: forge<T>
+            if self.current.kind in ("forge", "IDENT") and self.current.text == "forge":
+                self.at += 1
+                if self.accept("<"):
+                    depth = 1
+                    while depth > 0 and self.current.kind != "EOF":
+                        if self.current.kind == "<": depth += 1
+                        elif self.current.kind == ">": depth -= 1
+                        self.at += 1
             # Struct literal: IDENT { field: val, ... }
             if (self.current.kind == "{" and self.at + 2 < len(self.tokens) and
                     (self.tokens[self.at + 1].kind == "IDENT" or self.tokens[self.at + 1].kind in ("pulse", "probe", "forge", "enclave", "discern")) and self.tokens[self.at + 2].kind == ":"):
@@ -882,6 +982,36 @@ BUILTIN_FUNCTIONS: dict[str, Function] = {
     "baken_linear_to_srgb": Function("baken_linear_to_srgb", [("lin", Type("u32"))], Type("u8"), [], public=True, attributes=["@system"]),
     "baken_get_app_icon_alpha": Function("baken_get_app_icon_alpha", [("app_id", Type("u32")), ("size_px", Type("u32"))], Type("u8", pointer=True), [], public=True, attributes=["@system"]),
     "baken_get_motion_icon_alpha": Function("baken_get_motion_icon_alpha", [("motion_id", Type("u32")), ("size_px", Type("u32"))], Type("u8", pointer=True), [], public=True, attributes=["@system"]),
+    "__dma_fence": Function("__dma_fence", [], Type("void"), [], public=True, attributes=["@system"]),
+    "__sfence": Function("__sfence", [], Type("void"), [], public=True, attributes=["@system"]),
+    "__lfence": Function("__lfence", [], Type("void"), [], public=True, attributes=["@system"]),
+    "__cpu_pause": Function("__cpu_pause", [], Type("void"), [], public=True, attributes=["@system"]),
+    "__atomic_exchange_u32": Function("__atomic_exchange_u32", [("addr", Type("u64")), ("val", Type("u32"))], Type("u32"), [], public=True, attributes=["@system"]),
+    "__atomic_exchange_u64": Function("__atomic_exchange_u64", [("addr", Type("u64")), ("val", Type("u64"))], Type("u64"), [], public=True, attributes=["@system"]),
+    "__atomic_add_u64": Function("__atomic_add_u64", [("addr", Type("u64")), ("val", Type("u64"))], Type("u64"), [], public=True, attributes=["@system"]),
+    "__atomic_add_u32": Function("__atomic_add_u32", [("addr", Type("u64")), ("val", Type("u32"))], Type("u32"), [], public=True, attributes=["@system"]),
+    "__atomic_sub_u64": Function("__atomic_sub_u64", [("addr", Type("u64")), ("val", Type("u64"))], Type("u64"), [], public=True, attributes=["@system"]),
+    "__atomic_sub_u32": Function("__atomic_sub_u32", [("addr", Type("u64")), ("val", Type("u32"))], Type("u32"), [], public=True, attributes=["@system"]),
+    "__atomic_load_u32": Function("__atomic_load_u32", [("addr", Type("u64"))], Type("u32"), [], public=True, attributes=["@system"]),
+    "__atomic_load_u64": Function("__atomic_load_u64", [("addr", Type("u64"))], Type("u64"), [], public=True, attributes=["@system"]),
+    "__atomic_store_u32": Function("__atomic_store_u32", [("addr", Type("u64")), ("val", Type("u32"))], Type("void"), [], public=True, attributes=["@system"]),
+    "__atomic_store_u64": Function("__atomic_store_u64", [("addr", Type("u64")), ("val", Type("u64"))], Type("void"), [], public=True, attributes=["@system"]),
+    "__atomic_cmpxchg_u64": Function("__atomic_cmpxchg_u64", [("addr", Type("u64")), ("exp", Type("u64")), ("des", Type("u64"))], Type("u64"), [], public=True, attributes=["@system"]),
+    "__atomic_cmpxchg_u32": Function("__atomic_cmpxchg_u32", [("addr", Type("u64")), ("exp", Type("u32")), ("des", Type("u32"))], Type("u32"), [], public=True, attributes=["@system"]),
+    "__irq_save_disable": Function("__irq_save_disable", [], Type("u64"), [], public=True, attributes=["@system"]),
+    "__irq_restore": Function("__irq_restore", [("flags", Type("u64"))], Type("void"), [], public=True, attributes=["@system"]),
+    "__interrupts_enabled": Function("__interrupts_enabled", [], Type("bool"), [], public=True, attributes=["@system"]),
+    "__read_cr0": Function("__read_cr0", [], Type("u64"), [], public=True, attributes=["@system"]),
+    "__write_cr0": Function("__write_cr0", [("val", Type("u64"))], Type("void"), [], public=True, attributes=["@system"]),
+    "__read_cr2": Function("__read_cr2", [], Type("u64"), [], public=True, attributes=["@system"]),
+    "__read_cr3": Function("__read_cr3", [], Type("u64"), [], public=True, attributes=["@system"]),
+    "__write_cr3": Function("__write_cr3", [("val", Type("u64"))], Type("void"), [], public=True, attributes=["@system"]),
+    "__read_cr4": Function("__read_cr4", [], Type("u64"), [], public=True, attributes=["@system"]),
+    "__write_cr4": Function("__write_cr4", [("val", Type("u64"))], Type("void"), [], public=True, attributes=["@system"]),
+    "__swapgs": Function("__swapgs", [], Type("void"), [], public=True, attributes=["@system"]),
+    "__read_gs_base": Function("__read_gs_base", [], Type("u64"), [], public=True, attributes=["@system"]),
+    "__current_rsp": Function("__current_rsp", [], Type("u64"), [], public=True, attributes=["@system"]),
+    "__invlpg": Function("__invlpg", [("addr", Type("u64"))], Type("void"), [], public=True, attributes=["@system"]),
 }
 
 
@@ -973,6 +1103,8 @@ def check(module: Module, imported_fns: dict[str, Function] | None = None,
             function = functions.get(expr.callee)
             if function:
                 return function.result
+            if expr.callee.startswith("__") or expr.callee.startswith("baken_"):
+                return Type("u64")
             raise SotlasBootstrapError(
                 f"função não declarada: {expr.callee}", expr.token.line,
                 expr.token.column, filename, source,
@@ -1071,6 +1203,9 @@ def check(module: Module, imported_fns: dict[str, Function] | None = None,
                     expr_type(item.value.value, scope, in_unsafe, is_system_fn)
                 elif item.value is not None:
                     expr_type(item.value, scope, in_unsafe, is_system_fn)
+            elif isinstance(item, Asm):
+                for e in item.outputs: expr_type(e, scope, in_unsafe, is_system_fn)
+                for e in item.inputs: expr_type(e, scope, in_unsafe, is_system_fn)
 
     for function in module.functions:
         is_system = "@system" in function.attributes or "@inline" in function.attributes
@@ -1155,6 +1290,11 @@ PREAMBLE = """/* Gerado pelo frontend Sotlas Bootstrap. */
 #include <stddef.h>
 #include <stdbool.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wparentheses-equality"
+#endif
+
 static inline void __outb(uint16_t port, uint8_t val) {
 #if defined(__x86_64__) || defined(__i386__)
     __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -1216,6 +1356,8 @@ static inline uint16_t baken_pci_in16(uint16_t port) { return __inw(port); }
 static inline void baken_pci_out8(uint16_t port, uint8_t val) { __outb(port, val); }
 static inline uint8_t baken_pci_in8(uint16_t port) { return __inb(port); }
 
+#ifndef __rdmsr_defined
+#define __rdmsr_defined
 static inline uint64_t __rdmsr(uint32_t msr) {
 #if defined(__x86_64__) || defined(__i386__)
     uint32_t low, high;
@@ -1235,6 +1377,7 @@ static inline void __wrmsr(uint32_t msr, uint64_t val) {
     (void)msr; (void)val;
 #endif
 }
+#endif
 
 static inline void baken_io_wait(void) {
 #if defined(__x86_64__) || defined(__i386__)
@@ -1567,6 +1710,14 @@ def emit_c(module: Module, mangle: bool = False, include_preamble: bool = True,
                 out.append(f"{pad}continue;")
             elif isinstance(item, Expression):
                 out.append(f"{pad}{_emit_expr(item.value, prefix)};")
+            elif isinstance(item, Asm):
+                parts = [item.code]
+                if item.outputs or item.inputs or item.clobbers:
+                    out_s = ", ".join(_emit_expr(e, prefix) for e in item.outputs)
+                    in_s = ", ".join(_emit_expr(e, prefix) for e in item.inputs)
+                    clob_s = ", ".join(item.clobbers)
+                    parts.append(f": {out_s} : {in_s} : {clob_s}")
+                out.append(f"{pad}__asm__ volatile({ ' '.join(parts) });")
             elif isinstance(item, Unsafe):
                 out.extend(emit_statements(item.body, depth, defer_scopes, loop_scope_depth, ret_type))
             elif isinstance(item, While):

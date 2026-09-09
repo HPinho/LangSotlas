@@ -203,7 +203,17 @@ def find_gcc(root: Path) -> Path:
     which_gcc = shutil.which("gcc")
     if which_gcc:
         return Path(which_gcc)
-    raise SotlasError("compilador GCC não encontrado; configure SOTLAS_CC para cross-compilar")
+    which_clang = shutil.which("clang")
+    if which_clang:
+        return Path(which_clang)
+    for clang_candidate in [
+        Path(r"C:\Program Files\LLVM\bin\clang.exe"),
+        Path(r"C:\Program Files (x86)\LLVM\bin\clang.exe"),
+        Path(r"C:\LLVM\bin\clang.exe"),
+    ]:
+        if clang_candidate.exists():
+            return clang_candidate
+    raise SotlasError("compilador C (GCC ou Clang) não encontrado; configure SOTLAS_CC para cross-compilar")
 
 # =============================================================================
 # PARSER & TYPECHECKER SOTLAS (Fase VIII: Backend Sotlas Nativo)

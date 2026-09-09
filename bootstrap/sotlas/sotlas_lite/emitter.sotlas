@@ -14,9 +14,155 @@ pub fn type_to_c(st_type: *const u8, dest: *mut u8, max_len: usize) -> usize {
     if str_eq(st_type, "i32") { return str_copy(dest, "int32_t", max_len); }
     if str_eq(st_type, "i64") { return str_copy(dest, "int64_t", max_len); }
     if str_eq(st_type, "isize") { return str_copy(dest, "intptr_t", max_len); }
-    if str_eq(st_type, "bool") { return str_copy(dest, "_Bool", max_len); }
+    if str_eq(st_type, "bool") { return str_copy(dest, "bool", max_len); }
     if str_eq(st_type, "void") { return str_copy(dest, "void", max_len); }
     return str_copy(dest, st_type, max_len);
+}
+
+@system
+pub fn format_type(tokens: *const Token, tok_count: usize, idx: usize, dest: *mut u8, max_len: usize) -> usize {
+    if tokens == null || dest == null || idx >= tok_count || max_len == 0 {
+        return 0;
+    }
+    unsafe {
+        let t0: *const u8 = tokens[idx].text as *const u8;
+        if str_eq(t0, "*") {
+            if (idx + 1 < tok_count) && str_eq(tokens[idx + 1].text as *const u8, "const") {
+                if idx + 2 < tok_count {
+                    let mut base: [u8; 32] = 0;
+                    type_to_c(tokens[idx + 2].text as *const u8, base as *mut u8, 32);
+                    str_copy(dest, "const ", max_len);
+                    str_concat(dest, base as *const u8, max_len);
+                    str_concat(dest, "*", max_len);
+                    return 3;
+                }
+            } else if (idx + 1 < tok_count) && str_eq(tokens[idx + 1].text as *const u8, "mut") {
+                if idx + 2 < tok_count {
+                    let mut base: [u8; 32] = 0;
+                    type_to_c(tokens[idx + 2].text as *const u8, base as *mut u8, 32);
+                    str_copy(dest, base as *const u8, max_len);
+                    str_concat(dest, "*", max_len);
+                    return 3;
+                }
+            } else if idx + 1 < tok_count {
+                let mut base: [u8; 32] = 0;
+                type_to_c(tokens[idx + 1].text as *const u8, base as *mut u8, 32);
+                str_copy(dest, base as *const u8, max_len);
+                str_concat(dest, "*", max_len);
+                return 2;
+            }
+        } else if str_eq(t0, "&") {
+            if (idx + 1 < tok_count) && str_eq(tokens[idx + 1].text as *const u8, "mut") {
+                if idx + 2 < tok_count {
+                    let mut base: [u8; 32] = 0;
+                    type_to_c(tokens[idx + 2].text as *const u8, base as *mut u8, 32);
+                    str_copy(dest, base as *const u8, max_len);
+                    str_concat(dest, "*", max_len);
+                    return 3;
+                }
+            } else if idx + 1 < tok_count {
+                let mut base: [u8; 32] = 0;
+                type_to_c(tokens[idx + 1].text as *const u8, base as *mut u8, 32);
+                str_copy(dest, "const ", max_len);
+                str_concat(dest, base as *const u8, max_len);
+                str_concat(dest, "*", max_len);
+                return 2;
+            }
+        }
+        type_to_c(t0, dest, max_len);
+        return 1;
+    }
+}
+
+@system
+pub fn apply_cast_in_buffer(out_buf: *mut u8, cast_type: *const u8, max_len: usize) {
+    if out_buf == null || cast_type == null || max_len == 0 {
+        return;
+    }
+    unsafe {
+        let mut cur_len: usize = str_len(out_buf as *const u8);
+        while cur_len > 0 && (out_buf[cur_len - 1] == 32 || out_buf[cur_len - 1] == 9) {
+            cur_len = cur_len - 1;
+            out_buf[cur_len] = 0;
+        }
+        if cur_len == 0 {
+            return;
+        }
+
+        let mut insert_pos: usize = 0;
+        if out_buf[cur_len - 1] == 41 { // ')'
+            let mut depth: usize = 1;
+            let mut p: usize = cur_len - 1;
+            while p > 0 && depth > 0 {
+                p = p - 1;
+                if out_buf[p] == 41 { // ')'
+                    depth = depth + 1;
+                } else if out_buf[p] == 40 { // '('
+                    depth = depth - 1;
+                    if depth == 0 {
+                        insert_pos = p;
+                        break;
+                    }
+                }
+            }
+        } else if out_buf[cur_len - 1] == 93 { // ']'
+            let mut depth: usize = 1;
+            let mut p: usize = cur_len - 1;
+            while p > 0 && depth > 0 {
+                p = p - 1;
+                if out_buf[p] == 93 { // ']'
+                    depth = depth + 1;
+                } else if out_buf[p] == 91 { // '['
+                    depth = depth - 1;
+                }
+            }
+            while p > 0 && (is_alphanumeric(out_buf[p - 1]) || out_buf[p - 1] == 32) {
+                p = p - 1;
+            }
+            insert_pos = p;
+        } else {
+            let mut p: usize = cur_len;
+            while p > 0 {
+                let ch: u8 = out_buf[p - 1];
+                if is_alphanumeric(ch) || ch == 46 || ch == 45 || ch == 62 { // '.', '-', '>'
+                    p = p - 1;
+                } else {
+                    break;
+                }
+            }
+            insert_pos = p;
+        }
+
+        // Monta o prefixo de cast: '(' + cast_type + ')'
+        let mut cast_prefix: [u8; 64] = 0;
+        cast_prefix[0] = 40; // '('
+        cast_prefix[1] = 0;
+        str_concat(cast_prefix as *mut u8, cast_type, 64);
+        str_concat(cast_prefix as *mut u8, ")", 64);
+        let prefix_len: usize = str_len(cast_prefix as *const u8);
+
+        if (cur_len + prefix_len) >= (max_len - 1) {
+            return;
+        }
+
+        // Desloca caracteres a partir de insert_pos para a direita
+        let mut m: usize = cur_len;
+        while m >= insert_pos {
+            out_buf[m + prefix_len] = out_buf[m];
+            if m == 0 {
+                break;
+            }
+            m = m - 1;
+        }
+
+        // Copia cast_prefix para insert_pos
+        let mut k: usize = 0;
+        while k < prefix_len {
+            out_buf[insert_pos + k] = cast_prefix[k];
+            k = k + 1;
+        }
+        out_buf[cur_len + prefix_len] = 0;
+    }
 }
 
 @system
@@ -24,7 +170,12 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
     if tokens == null || out_buf == null || max_len == 0 {
         return 0;
     }
-    str_copy(out_buf, "/* Gerado pelo Sotlas Compile-lite em Sotlas Bootstrap */\n#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n\n", max_len);
+    str_copy(out_buf, "/* Gerado pelo Sotlas Native Compiler (Self-Hosted Architecture) */\n", max_len);
+    str_concat(out_buf, "#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n", max_len);
+    str_concat(out_buf, "#if defined(__GNUC__) || defined(__clang__)\n#pragma GCC diagnostic ignored \"-Wunused-function\"\n#pragma GCC diagnostic ignored \"-Wparentheses-equality\"\n#endif\n\n", max_len);
+    str_concat(out_buf, "static inline void __pause(void) { __asm__ volatile (\"pause\"); }\n", max_len);
+    str_concat(out_buf, "static inline void __cli(void) { __asm__ volatile (\"cli\"); }\n", max_len);
+    str_concat(out_buf, "static inline void __sti(void) { __asm__ volatile (\"sti\"); }\n\n", max_len);
 
     let mut i: usize = 0;
     unsafe {
@@ -36,7 +187,7 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 break;
             }
 
-            // Ignora declarações de 'module' e 'import' (resolvidas estaticamente)
+            // Ignora declarações de 'module' e 'import' (resolvidas na compilação)
             if str_eq(txt, "module") || str_eq(txt, "import") {
                 while i < tok_count && !str_eq(tokens[i].text as *const u8, ";") {
                     i = i + 1;
@@ -47,8 +198,9 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 continue;
             }
 
-            // Ignora 'pub', 'unsafe', '@system', '@export', '@inline', '@inline'
-            if str_eq(txt, "pub") || str_eq(txt, "unsafe") || str_eq(txt, "@system") || str_eq(txt, "@export") || str_eq(txt, "@inline") {
+            // Ignora qualificadores e atributos
+            if str_eq(txt, "pub") || str_eq(txt, "unsafe") || str_eq(txt, "@system") ||
+               str_eq(txt, "@export") || str_eq(txt, "@inline") || str_eq(txt, "@repr(C)") {
                 i = i + 1;
                 continue;
             }
@@ -60,26 +212,242 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 continue;
             }
 
-            // struct -> typedef struct
-            if str_eq(txt, "struct") {
-                str_concat(out_buf, "typedef struct ", max_len);
-                i = i + 1;
-                continue;
-            }
-
-            // enum -> typedef enum
-            if str_eq(txt, "enum") {
-                str_concat(out_buf, "typedef enum ", max_len);
-                i = i + 1;
-                continue;
-            }
-
             // null -> NULL
             if str_eq(txt, "null") {
-                str_concat(out_buf, "NULL", max_len);
-                str_concat(out_buf, " ", max_len);
+                str_concat(out_buf, "NULL ", max_len);
                 i = i + 1;
                 continue;
+            }
+
+            // loop -> while (1)
+            if str_eq(txt, "loop") {
+                str_concat(out_buf, "while (1) ", max_len);
+                i = i + 1;
+                continue;
+            }
+
+            // break
+            if str_eq(txt, "break") {
+                str_concat(out_buf, "break; ", max_len);
+                i = i + 1;
+                continue;
+            }
+
+            // const -> static const <type> <name>
+            if str_eq(txt, "const") {
+                if i + 1 < tok_count {
+                    let c_name: *const u8 = tokens[i + 1].text as *const u8;
+                    i = i + 2;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ":") {
+                        i = i + 1;
+                        let mut c_type: [u8; 64] = 0;
+                        let consumed_c: usize = format_type(tokens, tok_count, i, c_type as *mut u8, 64);
+                        str_concat(out_buf, "static const ", max_len);
+                        str_concat(out_buf, c_type as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        str_concat(out_buf, c_name, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        i = i + consumed_c;
+                        continue;
+                    }
+                }
+            }
+
+            // struct Definition
+            if str_eq(txt, "struct") {
+                if i + 1 < tok_count {
+                    let s_name: *const u8 = tokens[i + 1].text as *const u8;
+                    str_concat(out_buf, "typedef struct ", max_len);
+                    str_concat(out_buf, s_name, max_len);
+                    str_concat(out_buf, " {\n", max_len);
+                    i = i + 2;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        i = i + 1;
+                    }
+                    while i < tok_count && !str_eq(tokens[i].text as *const u8, "}") {
+                        if str_eq(tokens[i].text as *const u8, "pub") {
+                            i = i + 1;
+                            continue;
+                        }
+                        let f_name: *const u8 = tokens[i].text as *const u8;
+                        i = i + 1;
+                        if i < tok_count && str_eq(tokens[i].text as *const u8, ":") {
+                            i = i + 1;
+                            if i < tok_count && str_eq(tokens[i].text as *const u8, "[") {
+                                let f_arr_type: *const u8 = tokens[i + 1].text as *const u8;
+                                let f_arr_size: *const u8 = tokens[i + 3].text as *const u8;
+                                let mut f_arr_c: [u8; 32] = 0;
+                                type_to_c(f_arr_type, f_arr_c as *mut u8, 32);
+                                str_concat(out_buf, "    ", max_len);
+                                str_concat(out_buf, f_arr_c as *const u8, max_len);
+                                str_concat(out_buf, " ", max_len);
+                                str_concat(out_buf, f_name, max_len);
+                                str_concat(out_buf, "[", max_len);
+                                str_concat(out_buf, f_arr_size, max_len);
+                                str_concat(out_buf, "];\n", max_len);
+                                i = i + 5;
+                                if i < tok_count && (str_eq(tokens[i].text as *const u8, ";") || str_eq(tokens[i].text as *const u8, ",")) {
+                                    i = i + 1;
+                                }
+                                continue;
+                            }
+                            let mut f_type_c: [u8; 64] = 0;
+                            let consumed_f: usize = format_type(tokens, tok_count, i, f_type_c as *mut u8, 64);
+                            str_concat(out_buf, "    ", max_len);
+                            str_concat(out_buf, f_type_c as *const u8, max_len);
+                            str_concat(out_buf, " ", max_len);
+                            str_concat(out_buf, f_name, max_len);
+                            str_concat(out_buf, ";\n", max_len);
+                            i = i + consumed_f;
+                            if i < tok_count && (str_eq(tokens[i].text as *const u8, ";") || str_eq(tokens[i].text as *const u8, ",")) {
+                                i = i + 1;
+                            }
+                        } else {
+                            i = i + 1;
+                        }
+                    }
+                    str_concat(out_buf, "} ", max_len);
+                    str_concat(out_buf, s_name, max_len);
+                    str_concat(out_buf, ";\n\n", max_len);
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "}") {
+                        i = i + 1;
+                    }
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                        i = i + 1;
+                    }
+                    continue;
+                }
+            }
+
+            // enum Definition
+            if str_eq(txt, "enum") {
+                if i + 1 < tok_count {
+                    let e_name: *const u8 = tokens[i + 1].text as *const u8;
+                    str_concat(out_buf, "typedef enum ", max_len);
+                    str_concat(out_buf, e_name, max_len);
+                    str_concat(out_buf, " {\n", max_len);
+                    i = i + 2;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        i = i + 1;
+                    }
+                    while i < tok_count && !str_eq(tokens[i].text as *const u8, "}") {
+                        str_concat(out_buf, tokens[i].text as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        i = i + 1;
+                    }
+                    str_concat(out_buf, "} ", max_len);
+                    str_concat(out_buf, e_name, max_len);
+                    str_concat(out_buf, ";\n\n", max_len);
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "}") {
+                        i = i + 1;
+                    }
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                        i = i + 1;
+                    }
+                    continue;
+                }
+            }
+
+            // fn Definition
+            if str_eq(txt, "fn") {
+                if i + 1 < tok_count {
+                    let fn_name: *const u8 = tokens[i + 1].text as *const u8;
+                    i = i + 2; // aponta para '('
+                    let param_start: usize = i + 1;
+                    let mut paren_depth: usize = 1;
+                    let mut p: usize = i + 1;
+                    while p < tok_count && paren_depth > 0 {
+                        let tp: *const u8 = tokens[p].text as *const u8;
+                        if str_eq(tp, "(") {
+                            paren_depth = paren_depth + 1;
+                        } else if str_eq(tp, ")") {
+                            paren_depth = paren_depth - 1;
+                            if paren_depth == 0 {
+                                break;
+                            }
+                        }
+                        p = p + 1;
+                    }
+                    let param_end: usize = p;
+
+                    // Verifica se existe -> tipo_de_retorno
+                    let mut ret_c: [u8; 64] = 0;
+                    let mut after_hdr: usize = param_end + 1;
+                    if after_hdr < tok_count && str_eq(tokens[after_hdr].text as *const u8, "->") {
+                        let ret_idx: usize = after_hdr + 1;
+                        let consumed_ret: usize = format_type(tokens, tok_count, ret_idx, ret_c as *mut u8, 64);
+                        after_hdr = ret_idx + consumed_ret;
+                    } else {
+                        str_copy(ret_c as *mut u8, "void", 64);
+                    }
+
+                    str_concat(out_buf, ret_c as *const u8, max_len);
+                    str_concat(out_buf, " ", max_len);
+                    str_concat(out_buf, fn_name, max_len);
+                    str_concat(out_buf, "(", max_len);
+
+                    if param_start == param_end {
+                        str_concat(out_buf, "void", max_len);
+                    } else {
+                        let mut p_idx: usize = param_start;
+                        while p_idx < param_end {
+                            let pt: *const u8 = tokens[p_idx].text as *const u8;
+                            if str_eq(pt, ",") {
+                                str_concat(out_buf, ", ", max_len);
+                                p_idx = p_idx + 1;
+                                continue;
+                            }
+                            if str_eq(pt, "self") || str_eq(pt, "&self") {
+                                str_concat(out_buf, "void* self", max_len);
+                                p_idx = p_idx + 1;
+                                continue;
+                            }
+                            if str_eq(pt, "&") && (p_idx + 1 < param_end) && str_eq(tokens[p_idx + 1].text as *const u8, "self") {
+                                str_concat(out_buf, "void* self", max_len);
+                                p_idx = p_idx + 2;
+                                continue;
+                            }
+                            if str_eq(pt, "&") && (p_idx + 2 < param_end) && str_eq(tokens[p_idx + 1].text as *const u8, "mut") && str_eq(tokens[p_idx + 2].text as *const u8, "self") {
+                                str_concat(out_buf, "void* self", max_len);
+                                p_idx = p_idx + 3;
+                                continue;
+                            }
+                            if str_eq(pt, "mut") && (p_idx + 1 < param_end) && str_eq(tokens[p_idx + 1].text as *const u8, "self") {
+                                str_concat(out_buf, "void* self", max_len);
+                                p_idx = p_idx + 2;
+                                continue;
+                            }
+                            let p_name: *const u8 = tokens[p_idx].text as *const u8;
+                            p_idx = p_idx + 1;
+                            if p_idx < param_end && str_eq(tokens[p_idx].text as *const u8, ":") {
+                                p_idx = p_idx + 1;
+                                let mut p_type_c: [u8; 64] = 0;
+                                let consumed_p: usize = format_type(tokens, tok_count, p_idx, p_type_c as *mut u8, 64);
+                                str_concat(out_buf, p_type_c as *const u8, max_len);
+                                str_concat(out_buf, " ", max_len);
+                                str_concat(out_buf, p_name, max_len);
+                                p_idx = p_idx + consumed_p;
+                            } else {
+                                str_concat(out_buf, "int64_t ", max_len);
+                                str_concat(out_buf, p_name, max_len);
+                            }
+                        }
+                    }
+
+                    str_concat(out_buf, ") ", max_len);
+                    i = after_hdr;
+                    while i < tok_count && !str_eq(tokens[i].text as *const u8, "{") && !str_eq(tokens[i].text as *const u8, ";") {
+                        i = i + 1;
+                    }
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        str_concat(out_buf, "{\n", max_len);
+                        i = i + 1;
+                    } else if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                        str_concat(out_buf, ";\n\n", max_len);
+                        i = i + 1;
+                    }
+                    continue;
+                }
             }
 
             // let -> declaração de variável
@@ -92,13 +460,50 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 i = i + 1;
                 if i < tok_count && str_eq(tokens[i].text as *const u8, ":") {
                     i = i + 1;
-                    let type_name: *const u8 = tokens[i].text as *const u8;
-                    let mut c_type: [u8; 32] = 0;
-                    type_to_c(type_name, c_type as *mut u8, 32);
-                    str_concat(out_buf, c_type as *const u8, max_len);
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "[") {
+                        let arr_type: *const u8 = tokens[i + 1].text as *const u8;
+                        let arr_size: *const u8 = tokens[i + 3].text as *const u8;
+                        let mut arr_c: [u8; 32] = 0;
+                        type_to_c(arr_type, arr_c as *mut u8, 32);
+                        str_concat(out_buf, arr_c as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        str_concat(out_buf, var_name, max_len);
+                        str_concat(out_buf, "[", max_len);
+                        str_concat(out_buf, arr_size, max_len);
+                        str_concat(out_buf, "]", max_len);
+                        i = i + 5; // pula ]
+                        if i < tok_count && str_eq(tokens[i].text as *const u8, "=") {
+                            i = i + 1;
+                            if i < tok_count && str_eq(tokens[i].text as *const u8, "0") {
+                                i = i + 1;
+                            }
+                            str_concat(out_buf, " = {0}", max_len);
+                        }
+                        str_concat(out_buf, ";\n", max_len);
+                        if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                            i = i + 1;
+                        }
+                        continue;
+                    }
+                    let mut var_c: [u8; 64] = 0;
+                    let consumed_v: usize = format_type(tokens, tok_count, i, var_c as *mut u8, 64);
+                    let is_struct_type: bool = (var_c[0] >= 65 && var_c[0] <= 90);
+                    str_concat(out_buf, var_c as *const u8, max_len);
                     str_concat(out_buf, " ", max_len);
                     str_concat(out_buf, var_name, max_len);
-                    i = i + 1;
+                    i = i + consumed_v;
+
+                    // Se for struct inicializada com `= 0;`, emite `= {0};`
+                    if is_struct_type && (i < tok_count) && str_eq(tokens[i].text as *const u8, "=") {
+                        if (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "0") {
+                            str_concat(out_buf, " = {0};\n", max_len);
+                            i = i + 2;
+                            if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                                i = i + 1;
+                            }
+                            continue;
+                        }
+                    }
                 } else {
                     str_concat(out_buf, "int64_t ", max_len);
                     str_concat(out_buf, var_name, max_len);
@@ -107,46 +512,52 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 continue;
             }
 
-            // defer -> ignorar por agora (requer análise de escopo para implementação correta)
-            if str_eq(txt, "defer") {
-                // TODO: Implementar defer corretamente com rastreamento de escopo
-                // Por enquanto, apenas ignoramos o keyword
+            // if e while -> garante parênteses na condição para C11
+            if str_eq(txt, "if") || str_eq(txt, "while") {
+                let is_while: bool = str_eq(txt, "while");
+                if is_while {
+                    str_concat(out_buf, "while (", max_len);
+                } else {
+                    str_concat(out_buf, "if (", max_len);
+                }
                 i = i + 1;
+                let has_open_paren: bool = (i < tok_count) && str_eq(tokens[i].text as *const u8, "(");
+                if has_open_paren {
+                    i = i + 1;
+                }
+                while i < tok_count && !str_eq(tokens[i].text as *const u8, "{") {
+                    if has_open_paren && str_eq(tokens[i].text as *const u8, ")") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "{") {
+                        i = i + 1;
+                        break;
+                    }
+                    let c_tok: *const u8 = tokens[i].text as *const u8;
+                    if str_eq(c_tok, "null") {
+                        str_concat(out_buf, "NULL ", max_len);
+                    } else {
+                        str_concat(out_buf, c_tok, max_len);
+                        str_concat(out_buf, " ", max_len);
+                    }
+                    i = i + 1;
+                }
+                str_concat(out_buf, ") {\n", max_len);
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                    i = i + 1;
+                }
                 continue;
             }
 
-            // loop -> while (true)
-            if str_eq(txt, "loop") {
-                str_concat(out_buf, "while (true) ", max_len);
+            // as -> Type Casting em C
+            if str_eq(txt, "as") {
                 i = i + 1;
-                continue;
-            }
-
-            // break
-            if str_eq(txt, "break") {
-                str_concat(out_buf, "break; ", max_len);
-                i = i + 1;
-                continue;
-            }
-
-            // continue
-            if str_eq(txt, "continue") {
-                str_concat(out_buf, "continue; ", max_len);
-                i = i + 1;
-                continue;
-            }
-
-            // match -> POR IMPLEMENTAR (complexo)
-            if str_eq(txt, "match") {
-                // TODO: Implementar match corretamente
-                // Por enquanto, tratamos como identificador para não quebrar
-                str_concat(out_buf, txt, max_len);
+                let mut cast_c: [u8; 64] = 0;
+                let consumed_cast: usize = format_type(tokens, tok_count, i, cast_c as *mut u8, 64);
+                apply_cast_in_buffer(out_buf, cast_c as *const u8, max_len);
                 str_concat(out_buf, " ", max_len);
-                i = i + 1;
+                i = i + consumed_cast;
                 continue;
             }
 
-            // Conversão de tipos primitivos isolados
+            // Conversão de tipos primitivos isolados ou símbolos gerais
             let mut c_type: [u8; 32] = 0;
             if type_to_c(txt, c_type as *mut u8, 32) > 0 && !str_eq(txt, c_type as *const u8) {
                 str_concat(out_buf, c_type as *const u8, max_len);
@@ -154,7 +565,13 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 str_concat(out_buf, txt, max_len);
             }
 
-            str_concat(out_buf, " ", max_len);
+            if str_eq(txt, ";") {
+                str_concat(out_buf, "\n", max_len);
+            } else if str_eq(txt, "}") {
+                str_concat(out_buf, "\n", max_len);
+            } else {
+                str_concat(out_buf, " ", max_len);
+            }
             i = i + 1;
         }
     }

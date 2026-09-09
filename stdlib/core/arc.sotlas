@@ -7,16 +7,74 @@ pub struct ArcHeader {
     data_size: usize;
 }
 
+// ============================================================================
+// Atomic ARC — seguro para SMP
+// ============================================================================
+// Todas as operações em ref_count usam __atomic_add_u64 / __atomic_sub_u64
+// que compilam para `lock xaddq` no x86-64, garantindo atomicidade entre CPUs.
+
+@system
 pub fn arc_init(header: *mut ArcHeader, size: usize) {
     if header != null {
         unsafe {
+            // Inicialização não precisa ser atômica — nenhuma outra CPU tem
+            // acesso ao header neste ponto.
             header.ref_count = 1;
             header.data_size = size;
         }
     }
 }
 
+// Incrementa atomicamente o ref_count. Retorna o header para encadeamento.
+@system
 pub fn arc_retain(header: *mut ArcHeader) -> *mut ArcHeader {
+    if header != null {
+        unsafe {
+            __atomic_add_u64(&header.ref_count as *mut usize as u64, 1);
+        }
+    }
+    return header;
+}
+
+// Decrementa atomicamente o ref_count. Retorna true se o ref_count chegou a 0
+// (o chamador é responsável por liberar a memória).
+@system
+pub fn arc_release(header: *mut ArcHeader) -> bool {
+    if header != null {
+        unsafe {
+            // __atomic_sub_u64 retorna o valor ANTIGO.
+            // Se old era 1, então agora é 0 → último owner.
+            let old: u64 = __atomic_sub_u64(&header.ref_count as *mut usize as u64, 1);
+            if old == 1 {
+                // Full fence antes de qualquer destruição, para garantir que
+                // todos os acessos anteriores por outras CPUs sejam visíveis.
+                __dma_fence();
+                return true;
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
+// Lê atomicamente o ref_count sem modificá-lo.
+@system
+pub fn arc_count(header: *const ArcHeader) -> usize {
+    if header == null {
+        return 0;
+    }
+    unsafe {
+        return __atomic_load_u64(&header.ref_count as *const usize as u64) as usize;
+    }
+}
+
+// ============================================================================
+// Versões locais (não-atômicas) — para hot paths single-CPU
+// ============================================================================
+// Use SOMENTE quando tiver certeza de que o ArcHeader não é compartilhado
+// entre CPUs (e.g., dados thread-local, período de bootstrap antes de SMP).
+
+pub fn arc_retain_local(header: *mut ArcHeader) -> *mut ArcHeader {
     if header != null {
         unsafe {
             header.ref_count = header.ref_count + 1;
@@ -25,7 +83,7 @@ pub fn arc_retain(header: *mut ArcHeader) -> *mut ArcHeader {
     return header;
 }
 
-pub fn arc_release(header: *mut ArcHeader) -> bool {
+pub fn arc_release_local(header: *mut ArcHeader) -> bool {
     if header != null {
         unsafe {
             if header.ref_count > 0 {
@@ -37,14 +95,9 @@ pub fn arc_release(header: *mut ArcHeader) -> bool {
     return false;
 }
 
-pub fn arc_count(header: *const ArcHeader) -> usize {
-    if header == null {
-        return 0;
-    }
-    unsafe {
-        return header.ref_count;
-    }
-}
+// ============================================================================
+// SharedCounter — exemplo de uso do ARC atômico
+// ============================================================================
 
 pub class SharedCounter {
     header: ArcHeader;
@@ -60,6 +113,8 @@ pub class SharedCounter {
     pub fn increment(self: *mut SharedCounter) {
         if self != null {
             unsafe {
+                // O incremento do value em si não é atômico aqui;
+                // o caller deve proteger com SpinLock se acessado de múltiplas CPUs.
                 self.value = self.value + 1;
             }
         }
