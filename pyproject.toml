@@ -9,7 +9,7 @@ description = "Sotlas Programming Language — Safe by default, unapologetically
 readme = "README.md"
 license = { text = "Apache-2.0 WITH LLVM-exception" }
 authors = [
-    { name = "Tastetrack Systems LTDA" }
+    { name = "Hiago Pinho" }
 ]
 keywords = ["compiler", "systems-programming", "operating-systems", "freestanding", "memory-safety", "type-safety"]
 classifiers = [

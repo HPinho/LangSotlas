@@ -1,7 +1,8 @@
 {
   "name": "baken-sotlas",
   "displayName": "Sotlas Language",
-  "publisher": "tastetrack",
+  "publisher": "hiagopinho",
+  "author": "Hiago Pinho",
   "description": "Suporte oficial à linguagem Sotlas: realce de sintaxe, LSP, diagnósticos e comandos de compilação",
   "version": "0.3.0",
   "icon": "./icons/sotlas-icon.png",
