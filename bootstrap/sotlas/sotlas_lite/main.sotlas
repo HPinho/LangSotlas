@@ -5,7 +5,9 @@ import sotlas_compile::token::*;
 import sotlas_compile::lexer::*;
 import sotlas_compile::emitter::*;
 
-pub const MAX_TOKENS: usize = 4096;
+pub const MAX_TOKENS: usize = 65536;
+
+static mut g_tokens: [Token; 65536] = 0;
 
 @export
 @system
@@ -13,17 +15,16 @@ pub fn sotlas_compile(source: *const u8, out_buf: *mut u8, max_len: usize) -> us
     if source == null || out_buf == null || max_len == 0 {
         return 0;
     }
-    let mut tokens: [Token; 4096] = 0;
     let mut tok_count: usize = 0;
     unsafe {
-        tok_count = lex_source(source, tokens as *mut Token, MAX_TOKENS);
+        tok_count = lex_source(source, g_tokens as *mut Token, MAX_TOKENS);
     }
     if tok_count == 0 {
         return 0;
     }
     let mut emitted: usize = 0;
     unsafe {
-        emitted = emit_c_from_tokens(tokens as *const Token, tok_count, out_buf, max_len);
+        emitted = emit_c_from_tokens(g_tokens as *const Token, tok_count, out_buf, max_len);
     }
     return emitted;
 }

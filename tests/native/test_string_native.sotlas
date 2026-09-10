@@ -1,0 +1,42 @@
+module test::string_native;
+
+import core::string::*;
+
+pub fn main() -> i32 {
+    let raw: *const u8 = "hello, world!" as *const u8;
+    let s: StringSlice = string_from_raw(raw, 13);
+
+    if string_len(s) != 13 {
+        return 1;
+    }
+    if string_is_empty(s) {
+        return 2;
+    }
+    if string_char_at(s, 0) != 104 { // 'h'
+        return 3;
+    }
+
+    let hello_raw: *const u8 = "hello" as *const u8;
+    let hello: StringSlice = string_from_raw(hello_raw, 5);
+    if !string_starts_with(s, hello) {
+        return 4;
+    }
+
+    let world_raw: *const u8 = "world!" as *const u8;
+    let world: StringSlice = string_from_raw(world_raw, 6);
+    if !string_ends_with(s, world) {
+        return 5;
+    }
+
+    let sub: StringSlice = string_slice(s, 0, 5);
+    if !string_equals(sub, hello) {
+        return 6;
+    }
+
+    let comma_idx: i64 = string_find_char(s, 44); // ','
+    if comma_idx != 5 {
+        return 7;
+    }
+
+    return 0;
+}

@@ -55,9 +55,21 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                 let start_col: u32 = col;
                 i = i + 1;
                 col = col + 1;
-                while is_alphanumeric(src[i]) || src[i] == 40 || src[i] == 41 {
+                while is_alphanumeric(src[i]) || src[i] == 95 {
                     i = i + 1;
                     col = col + 1;
+                }
+                if src[i] == 40 {
+                    i = i + 1;
+                    col = col + 1;
+                    while src[i] != 0 && src[i] != 41 {
+                        i = i + 1;
+                        col = col + 1;
+                    }
+                    if src[i] == 41 {
+                        i = i + 1;
+                        col = col + 1;
+                    }
                 }
                 let len: usize = i - start_i;
                 let mut tok: Token = 0;
@@ -65,7 +77,7 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                 tok.line = line;
                 tok.col = start_col;
                 let mut k: usize = 0;
-                while k < len && k < 63 {
+                while k < len && k < 255 {
                     tok.text[k] = src[start_i + k];
                     k = k + 1;
                 }
@@ -76,24 +88,29 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
             // String literal "..."
             else if ch == 34 {
                 let start_col: u32 = col;
+                let start_i: usize = i;
                 i = i + 1;
                 col = col + 1;
-                let start_i: usize = i;
                 while src[i] != 0 && src[i] != 34 {
-                    i = i + 1;
-                    col = col + 1;
+                    if src[i] == 92 && src[i + 1] != 0 {
+                        i = i + 2;
+                        col = col + 2;
+                    } else {
+                        i = i + 1;
+                        col = col + 1;
+                    }
                 }
-                let len: usize = i - start_i;
                 if src[i] == 34 {
                     i = i + 1;
                     col = col + 1;
                 }
+                let len: usize = i - start_i;
                 let mut tok: Token = 0;
                 tok.kind = TokenKind::StringLit;
                 tok.line = line;
                 tok.col = start_col;
                 let mut k: usize = 0;
-                while k < len && k < 63 {
+                while k < len && k < 255 {
                     tok.text[k] = src[start_i + k];
                     k = k + 1;
                 }
@@ -115,7 +132,7 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                 tok.line = line;
                 tok.col = start_col;
                 let mut k: usize = 0;
-                while k < len && k < 63 {
+                while k < len && k < 255 {
                     tok.text[k] = src[start_i + k];
                     k = k + 1;
                 }
@@ -131,8 +148,13 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                    str_eq(txt_ptr, "unsafe") || str_eq(txt_ptr, "const") ||
                    str_eq(txt_ptr, "static") || str_eq(txt_ptr, "as") ||
                    str_eq(txt_ptr, "null") || str_eq(txt_ptr, "true") || str_eq(txt_ptr, "false") ||
-                   str_eq(txt_ptr, "match") || str_eq(txt_ptr, "loop") ||
-                   str_eq(txt_ptr, "break") || str_eq(txt_ptr, "continue") ||
+                   str_eq(txt_ptr, "match") || str_eq(txt_ptr, "discern") || str_eq(txt_ptr, "probe") ||
+                   str_eq(txt_ptr, "case") || str_eq(txt_ptr, "pulse") ||
+                   str_eq(txt_ptr, "notch") || str_eq(txt_ptr, "slit") || str_eq(txt_ptr, "strand") ||
+                   str_eq(txt_ptr, "rawphys") || str_eq(txt_ptr, "virtmap") || str_eq(txt_ptr, "portwire") ||
+                   str_eq(txt_ptr, "dmazone") || str_eq(txt_ptr, "voidzero") ||
+                   str_eq(txt_ptr, "clinch") || str_eq(txt_ptr, "revert") || str_eq(txt_ptr, "handover") ||
+                   str_eq(txt_ptr, "loop") || str_eq(txt_ptr, "break") || str_eq(txt_ptr, "continue") ||
                    str_eq(txt_ptr, "defer") || str_eq(txt_ptr, "for") ||
                    str_eq(txt_ptr, "in") || str_eq(txt_ptr, "class") ||
                    str_eq(txt_ptr, "self") || str_eq(txt_ptr, "asm") ||
@@ -167,7 +189,7 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                 tok.line = line;
                 tok.col = start_col;
                 let mut k: usize = 0;
-                while k < len && k < 63 {
+                while k < len && k < 255 {
                     tok.text[k] = src[start_i + k];
                     k = k + 1;
                 }
@@ -179,7 +201,7 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
             else if is_digit(ch) {
                 let start_i: usize = i;
                 let start_col: u32 = col;
-                if ch == 48 && (src[i + 1] == 120 || src[i + 1] == 88) {
+                if ch == 48 && (src[i + 1] == 120 || src[i + 1] == 88 || src[i + 1] == 98 || src[i + 1] == 66 || src[i + 1] == 111 || src[i + 1] == 79) {
                     i = i + 2;
                     col = col + 2;
                     while is_alphanumeric(src[i]) {
@@ -187,7 +209,7 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                         col = col + 1;
                     }
                 } else {
-                    while is_digit(src[i]) || src[i] == 46 {
+                    while is_digit(src[i]) || (src[i] == 46 && src[i + 1] != 46 && is_digit(src[i + 1])) {
                         i = i + 1;
                         col = col + 1;
                     }
@@ -198,7 +220,7 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                 tok.line = line;
                 tok.col = start_col;
                 let mut k: usize = 0;
-                while k < len && k < 63 {
+                while k < len && k < 255 {
                     tok.text[k] = src[start_i + k];
                     k = k + 1;
                 }
@@ -206,8 +228,9 @@ pub fn lex_source(src: *const u8, tokens: *mut Token, max_tokens: usize) -> usiz
                 tokens[tok_count] = tok;
                 tok_count = tok_count + 1;
             }
-            // Símbolos multi-char (:: -> == != <= >= && || << >> += -= *= /= &= |=)
+            // Símbolos multi-char (:: -> => .. == != <= >= && || << >> += -= *= /= &= |=)
             else if (ch == 58 && src[i + 1] == 58) || (ch == 45 && src[i + 1] == 62) ||
+                    (ch == 61 && src[i + 1] == 62) || (ch == 46 && src[i + 1] == 46) ||
                     (ch == 61 && src[i + 1] == 61) || (ch == 33 && src[i + 1] == 61) ||
                     (ch == 60 && src[i + 1] == 61) || (ch == 62 && src[i + 1] == 61) ||
                     (ch == 38 && src[i + 1] == 38) || (ch == 124 && src[i + 1] == 124) ||

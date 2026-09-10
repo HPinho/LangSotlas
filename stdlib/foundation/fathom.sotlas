@@ -1,0 +1,92 @@
+module foundation::fathom;
+
+// ============================================================================
+// Fathom — Non-Owning, High-Performance Contiguous Memory Window
+// ============================================================================
+//
+// Represents a zero-allocation, bounds-checked slice into arbitrary contiguous
+// memory. Used extensively in zero-copy parsing, network stack protocol frames,
+// OS microkernel IPC, and token streams.
+
+pub struct Fathom {
+    pub ptr: *const u8;
+    pub length: usize;
+
+    pub fn new(p: *const u8, len: usize) -> Fathom {
+        return Fathom {
+            ptr: p,
+            length: len
+        };
+    }
+
+    pub fn empty() -> Fathom {
+        unsafe {
+            return Fathom {
+                ptr: null as *const u8,
+                length: 0
+            };
+        }
+    }
+
+    pub fn is_empty(self) -> bool {
+        return self.length == 0;
+    }
+
+    pub fn count(self) -> usize {
+        return self.length;
+    }
+
+    @system
+    pub fn at(self, index: usize) -> u8 {
+        probe index < self.length, "index out of bounds in Fathom::at";
+        unsafe {
+            let p: *const u8 = (self.ptr + index) as *const u8;
+            return *p;
+        }
+    }
+
+    @system
+    pub fn subfathom(self, offset: usize, count: usize) -> Fathom {
+        probe (offset + count) <= self.length, "subfathom out of bounds in Fathom::subfathom";
+        unsafe {
+            return Fathom {
+                ptr: (self.ptr + offset) as *const u8,
+                length: count
+            };
+        }
+    }
+
+    @system
+    pub fn starts_with(self, prefix: Fathom) -> bool {
+        if prefix.length > self.length {
+            return false;
+        }
+        let mut i: usize = 0;
+        while i < prefix.length {
+            unsafe {
+                if *(self.ptr + i) != *(prefix.ptr + i) {
+                    return false;
+                }
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+
+    @system
+    pub fn equals(self, other: Fathom) -> bool {
+        if self.length != other.length {
+            return false;
+        }
+        let mut i: usize = 0;
+        while i < self.length {
+            unsafe {
+                if *(self.ptr + i) != *(other.ptr + i) {
+                    return false;
+                }
+            }
+            i = i + 1;
+        }
+        return true;
+    }
+}

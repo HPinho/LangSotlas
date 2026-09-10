@@ -1,0 +1,71 @@
+module test::native::runtime_app;
+
+struct Rect {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32
+}
+
+pub fn area(r: Rect) -> i32 {
+    return r.width * r.height;
+}
+
+pub fn perimeter(r: Rect) -> i32 {
+    return 2 * (r.width + r.height);
+}
+
+pub fn compute_factorial_sum(n: i32) -> i32 {
+    let mut sum: i32 = 0;
+    let mut i: i32 = 1;
+    while i <= n {
+        let mut fact: i32 = 1;
+        let mut j: i32 = 1;
+        while j <= i {
+            fact = fact * j;
+            j = j + 1;
+        }
+        sum = sum + fact;
+        i = i + 1;
+    }
+    return sum;
+}
+
+pub fn verify_buffer() -> bool {
+    let mut buf: [u8; 32] = 0;
+    let mut idx: usize = 0;
+    while idx < 32 {
+        buf[idx] = (idx * 2) as u8;
+        idx = idx + 1;
+    }
+
+    let mut checksum: u32 = 0;
+    let mut k: usize = 0;
+    while k < 32 {
+        checksum = checksum + buf[k] as u32;
+        k = k + 1;
+    }
+
+    // 0 + 2 + 4 + ... + 62 = 31 * 32 = 992
+    return checksum == 992;
+}
+
+pub fn main() -> i32 {
+    let mut rect: Rect = 0;
+    rect.x = 10;
+    rect.y = 20;
+    rect.width = 15;
+    rect.height = 8;
+
+    let rect_area: i32 = area(rect);       // 15 * 8 = 120
+    let rect_perim: i32 = perimeter(rect); // 2 * (15 + 8) = 46
+    probe rect_area == 120, "rect area must be 120";
+    probe rect_perim == 46, "rect perimeter must be 46";
+
+    // 1! + 2! + 3! + 4! = 1 + 2 + 6 + 24 = 33
+    let fact_sum: i32 = compute_factorial_sum(4);
+    probe fact_sum == 33, "factorial sum must equal 33";
+
+    probe verify_buffer(), "buffer verification checksum must equal 992";
+    return 0;
+}

@@ -69,7 +69,7 @@ class Parser:
     def _is_ident_like(self, tok: Token) -> bool:
         return tok.kind == TK.IDENT or tok.kind in (
             TK.KW_PULSE, TK.KW_PROBE, TK.KW_ENCLAVE, TK.KW_FORGE, TK.KW_DISCERN, TK.KW_SELF,
-            TK.KW_BOOL, TK.KW_NIL, TK.KW_VOID
+            TK.KW_BOOL, TK.KW_NIL, TK.KW_VOID, TK.KW_INIT, TK.KW_DEINIT
         ) or tok.kind in PRIMITIVE_TOKENS
 
     def _expect_ident_or_keyword(self) -> str:
@@ -149,11 +149,19 @@ class Parser:
     def _parse_top_level_decl(self):
         span = self._span()
         directives = self._parse_directives()
+        is_sole = False
+        if self._match(TK.KW_SOLE):
+            self._advance()
+            is_sole = True
         is_pub = self._consume(TK.KW_PUB)
+        if not is_sole and self._match(TK.KW_SOLE):
+            self._advance()
+            is_sole = True
+        is_sole = is_sole or any(d.name == "sole" for d in directives)
 
         cur = self._cur().kind
         if cur == TK.KW_STRUCT:
-            return self._parse_struct_decl(span, directives, is_pub)
+            return self._parse_struct_decl(span, directives, is_pub, is_sole=is_sole)
         if cur == TK.KW_CLASS:
             return self._parse_class_decl(span, directives, is_pub)
         if cur == TK.KW_MESH:
@@ -186,22 +194,27 @@ class Parser:
         while self._match(TK.AT):
             span = self._span()
             self._advance()
-            name = self._expect(TK.IDENT).value
+            name = self._expect_ident_or_keyword()
             args = []
             if self._consume(TK.LPAREN):
                 while not self._match(TK.RPAREN, TK.EOF):
-                    key = self._expect(TK.IDENT).value
-                    val = None
-                    if self._consume(TK.COLON):
+                    if self._match(TK.STR_LIT, TK.INT_LIT):
                         val = self._cur().value
                         self._advance()
-                    args.append((key, val))
+                        args.append(("", val))
+                    else:
+                        key = self._expect_ident_or_keyword()
+                        val = None
+                        if self._consume(TK.COLON):
+                            val = self._cur().value
+                            self._advance()
+                        args.append((key, val))
                     self._consume(TK.COMMA)
                 self._expect(TK.RPAREN)
             directives.append(DirectiveNode(span, name, args))
         return directives
 
-    def _parse_struct_decl(self, span, directives, is_pub) -> StructDeclNode:
+    def _parse_struct_decl(self, span, directives, is_pub, is_sole: bool = False) -> StructDeclNode:
         self._expect(TK.KW_STRUCT)
         name = self._expect_ident_or_keyword()
         generics = self._parse_generic_params()
@@ -211,7 +224,7 @@ class Parser:
         while not self._match(TK.RBRACE, TK.EOF):
             members.append(self._parse_struct_member())
         self._expect(TK.RBRACE)
-        return StructDeclNode(span, directives, is_pub, name, generics, adopts, members)
+        return StructDeclNode(span, directives, is_pub, name, generics, adopts, members, is_sole=is_sole)
 
     def _parse_class_decl(self, span, directives, is_pub) -> ClassDeclNode:
         self._expect(TK.KW_CLASS)
@@ -1069,6 +1082,35 @@ class Parser:
             return IdentNode(span, cur.value)
 
         if self._is_ident_like(cur):
+            val = cur.value
+            if val in ("span_of", "stride_of", "align_of") and (self._peek().kind in (TK.DCOLON, TK.LT)):
+                p1 = self._peek(1)
+                p2 = self._peek(2)
+                if p1.kind == TK.LT or (p1.kind == TK.DCOLON and p2.kind == TK.LT):
+                    self._advance()  # consume span_of/stride_of/align_of
+                    if self._match(TK.DCOLON):
+                        self._advance()  # consume ::
+                    self._expect(TK.LT)
+                    target_type = self._parse_type()
+                    self._expect(TK.GT)
+                    self._expect(TK.LPAREN)
+                    self._expect(TK.RPAREN)
+                    if val == "span_of":
+                        return SpanOfNode(span, target_type)
+                    elif val == "stride_of":
+                        return StrideOfNode(span, target_type)
+                    else:
+                        return AlignOfNode(span, target_type)
+            if val == "field_offset" and (self._peek().kind == TK.NOT or self._peek().value == "!"):
+                self._advance()  # consume field_offset
+                self._advance()  # consume !
+                self._expect(TK.LPAREN)
+                struct_name = self._expect_ident_or_keyword()
+                self._expect(TK.COMMA)
+                field_name = self._expect_ident_or_keyword()
+                self._expect(TK.RPAREN)
+                return FieldOffsetNode(span, struct_name, field_name)
+
             path = [self._advance().value]
             while self._match(TK.DCOLON) and self._is_ident_like(self._peek()):
                 self._advance()

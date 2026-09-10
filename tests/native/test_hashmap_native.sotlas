@@ -1,0 +1,51 @@
+module test::hashmap_native;
+
+import foundation::hashmap::*;
+
+static mut g_hash_entries: [HashEntry; 16] = 0;
+
+pub fn main() -> i32 {
+    let mut hm: HashMapU64 = hashmap_new(g_hash_entries as *mut HashEntry, 16);
+    
+    // Test insert and len
+    let ok1: bool = hashmap_insert(&mut hm, 1001, 55555);
+    let ok2: bool = hashmap_insert(&mut hm, 2002, 77777);
+    if !ok1 || !ok2 {
+        return 1;
+    }
+    if hashmap_len(&hm) != 2 {
+        return 2;
+    }
+
+    // Test get
+    let opt1: OptionU32 = hashmap_get(&hm, 1001);
+    if !opt1.has_value || opt1.value != 55555 {
+        return 3;
+    }
+
+    // Test remove
+    let rem_ok: bool = hashmap_remove(&mut hm, 1001);
+    if !rem_ok || hashmap_len(&hm) != 1 {
+        return 4;
+    }
+    let opt_after: OptionU32 = hashmap_get(&hm, 1001);
+    if opt_after.has_value {
+        return 5;
+    }
+
+    // Test clear
+    hashmap_clear(&mut hm);
+    if hashmap_len(&hm) != 0 {
+        return 6;
+    }
+
+    // Test string hashing
+    let test_str: *const u8 = "sotlas_key" as *const u8;
+    let h1: u64 = hash_str(test_str, 10);
+    let h2: u64 = hash_str(test_str, 10);
+    if h1 == 0 || h1 != h2 {
+        return 7;
+    }
+
+    return 0;
+}

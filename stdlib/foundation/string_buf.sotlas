@@ -1,105 +1,121 @@
 module foundation::string_buf;
 
+// ----------------------------------------------------------------------------
+// foundation::string_buf — Fixed-Capacity UTF-8 String Builder
+// ----------------------------------------------------------------------------
+//
+// Safe for baremetal and kernels because it operates strictly on a caller-owned
+// fixed memory buffer with zero reallocation spikes and zero GC pauses.
+// ----------------------------------------------------------------------------
+
 pub struct ByteSlice {
     pub data: *const u8;
     pub length: usize;
 }
 
-// Buffer dinâmico de strings UTF-8
-pub class StringBuf {
-    buffer: *mut u8;
-    length: usize;
-    capacity: usize;
+pub struct StringBuf {
+    pub buffer: *mut u8;
+    pub length: usize;
+    pub capacity: usize;
+}
 
-    pub fn new(backing_memory: *mut u8, cap: usize) -> StringBuf {
-        let mut sb: StringBuf = 0;
-        sb.buffer = backing_memory;
-        sb.length = 0;
-        sb.capacity = cap;
-        return sb;
-    }
-
-    pub fn len(self: *const StringBuf) -> usize {
-        if self == null {
-            return 0;
-        }
+pub fn string_buf_new(backing_memory: *mut u8, cap: usize) -> StringBuf {
+    let mut sb: StringBuf = 0;
+    sb.buffer = backing_memory;
+    sb.length = 0;
+    sb.capacity = cap;
+    if backing_memory != null && cap > 0 {
         unsafe {
-            return self.length;
+            *backing_memory = 0;
         }
     }
+    return sb;
+}
 
-    pub fn cap(self: *const StringBuf) -> usize {
-        if self == null {
-            return 0;
-        }
-        unsafe {
-            return self.capacity;
-        }
+pub fn string_buf_len(sb: *const StringBuf) -> usize {
+    if sb == null {
+        return 0;
     }
-
-    pub fn is_empty(self: *const StringBuf) -> bool {
-        if self == null {
-            return true;
-        }
-        unsafe {
-            return self.length == 0;
-        }
+    unsafe {
+        return (*sb).length;
     }
+}
 
-    pub fn append_char(self: *mut StringBuf, ch: u8) -> bool {
-        if self == null {
+pub fn string_buf_cap(sb: *const StringBuf) -> usize {
+    if sb == null {
+        return 0;
+    }
+    unsafe {
+        return (*sb).capacity;
+    }
+}
+
+pub fn string_buf_is_empty(sb: *const StringBuf) -> bool {
+    if sb == null {
+        return true;
+    }
+    unsafe {
+        return (*sb).length == 0;
+    }
+}
+
+pub fn string_buf_append_char(sb: *mut StringBuf, ch: u8) -> bool {
+    if sb == null {
+        return false;
+    }
+    unsafe {
+        if (*sb).buffer == null || (*sb).length >= ((*sb).capacity - 1) {
             return false;
         }
-        unsafe {
-            if self.buffer == null || self.length >= self.capacity {
-                return false;
-            }
-            let target: *mut u8 = self.buffer + self.length;
-            *target = ch;
-            self.length = self.length + 1;
-            return true;
-        }
+        let target: *mut u8 = (*sb).buffer + (*sb).length;
+        *target = ch;
+        (*sb).length = (*sb).length + 1;
+        let null_term: *mut u8 = (*sb).buffer + (*sb).length;
+        *null_term = 0;
+        return true;
     }
+}
 
-    pub fn append_str(self: *mut StringBuf, src: *const u8, src_len: usize) -> bool {
-        if self == null || src == null {
+pub fn string_buf_append_str(sb: *mut StringBuf, s: *const u8) -> bool {
+    if sb == null || s == null {
+        return false;
+    }
+    unsafe {
+        if (*sb).buffer == null {
             return false;
         }
-        unsafe {
-            if self.buffer == null || self.length + src_len > self.capacity {
-                return false;
-            }
-            let mut i: usize = 0;
-            while i < src_len {
-                let ch: u8 = *(src + i);
-                let target: *mut u8 = self.buffer + self.length + i;
-                *target = ch;
-                i = i + 1;
-            }
-            self.length = self.length + src_len;
-            return true;
+        let mut i: usize = 0;
+        let cap_minus_one: usize = (*sb).capacity - 1;
+        while *(s + i) != 0 && (*sb).length < cap_minus_one {
+            let target: *mut u8 = (*sb).buffer + (*sb).length;
+            *target = *(s + i);
+            (*sb).length = (*sb).length + 1;
+            i = i + 1;
         }
+        let null_term: *mut u8 = (*sb).buffer + (*sb).length;
+        *null_term = 0;
+        return true;
     }
+}
 
-    pub fn as_slice(self: *const StringBuf) -> ByteSlice {
-        if self == null {
-            return ByteSlice { data: null, length: 0 };
-        }
-        unsafe {
-            if self.buffer == null {
-                return ByteSlice { data: null, length: 0 };
-            }
-            return ByteSlice {
-                data: self.buffer as *const u8,
-                length: self.length
-            };
-        }
+pub fn string_buf_as_str(sb: *const StringBuf) -> *const u8 {
+    if sb == null {
+        return "" as *const u8;
     }
+    unsafe {
+        if (*sb).buffer == null {
+            return "" as *const u8;
+        }
+        return (*sb).buffer as *const u8;
+    }
+}
 
-    pub fn clear(self: *mut StringBuf) {
-        if self != null {
-            unsafe {
-                self.length = 0;
+pub fn string_buf_clear(sb: *mut StringBuf) {
+    if sb != null {
+        unsafe {
+            (*sb).length = 0;
+            if (*sb).buffer != null && (*sb).capacity > 0 {
+                *(*sb).buffer = 0;
             }
         }
     }

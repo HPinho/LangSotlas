@@ -58,6 +58,21 @@ pub class ResultU32 {
         }
         return default_val;
     }
+
+    pub fn unwrap(self: *const ResultU32) -> u32 {
+        unsafe {
+            return self.unwrap_or(0);
+        }
+    }
+
+    pub fn unwrap_err(self: *const ResultU32) -> ResultCode {
+        if self == null {
+            return ResultCode::Error;
+        }
+        unsafe {
+            return self.status;
+        }
+    }
 }
 
 pub class ResultI32 {
@@ -106,5 +121,20 @@ pub class ResultI32 {
             }
         }
         return default_val;
+    }
+
+    pub fn unwrap(self: *const ResultI32) -> i32 {
+        unsafe {
+            return self.unwrap_or(0);
+        }
+    }
+
+    pub fn unwrap_err(self: *const ResultI32) -> ResultCode {
+        if self == null {
+            return ResultCode::Error;
+        }
+        unsafe {
+            return self.status;
+        }
     }
 }

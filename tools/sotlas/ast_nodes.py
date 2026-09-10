@@ -244,6 +244,31 @@ class IfExprNode:
     else_expr: "ExprNode"
 
 
+@dataclass
+class SpanOfNode:
+    span: Span
+    target_type: TypeNode
+
+
+@dataclass
+class StrideOfNode:
+    span: Span
+    target_type: TypeNode
+
+
+@dataclass
+class AlignOfNode:
+    span: Span
+    target_type: TypeNode
+
+
+@dataclass
+class FieldOffsetNode:
+    span: Span
+    struct_name: str
+    field_name: str
+
+
 # TryExprNode é alias de OptionalChainExprNode (operador postfix '?')
 TryExprNode = OptionalChainExprNode
 
@@ -255,6 +280,7 @@ ExprNode = Union[
     BitStrandExprNode, CastExprNode, OptionalChainExprNode, ForceUnwrapExprNode,
     ArrayLitExprNode, ClosureExprNode, StructLitExprNode, TupleLitExprNode,
     TupleIndexExprNode, SliceExprNode, TryExprNode, IfExprNode, ArgNode,
+    SpanOfNode, StrideOfNode, AlignOfNode, FieldOffsetNode,
 ]
 
 
@@ -545,6 +571,7 @@ class StructDeclNode:
     generics: List[str]
     adopts: List[str]             # nomes de specs adotados
     members: List[Union[FieldDeclNode, FnDeclNode, InitDeclNode]]
+    is_sole: bool = False
 
 
 @dataclass

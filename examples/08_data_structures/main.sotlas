@@ -1,0 +1,90 @@
+module examples::data_structures;
+
+import foundation::hashmap::*;
+import core::iter::*;
+
+// 1. Ring Buffer Implementation
+struct RingBuffer {
+    buffer: [u32; 8],
+    head: usize,
+    tail: usize,
+    count: usize
+}
+
+pub fn ring_new() -> RingBuffer {
+    let mut rb: RingBuffer = 0;
+    rb.head = 0;
+    rb.tail = 0;
+    rb.count = 0;
+    return rb;
+}
+
+pub fn ring_push(rb: *mut RingBuffer, item: u32) -> bool {
+    if rb == null {
+        return false;
+    }
+    unsafe {
+        if (*rb).count >= 8 {
+            return false;
+        }
+        (*rb).buffer[(*rb).tail] = item;
+        (*rb).tail = ((*rb).tail + 1) % 8;
+        (*rb).count = (*rb).count + 1;
+        return true;
+    }
+}
+
+pub fn ring_pop(rb: *mut RingBuffer, out_item: *mut u32) -> bool {
+    if rb == null || out_item == null {
+        return false;
+    }
+    unsafe {
+        if (*rb).count == 0 {
+            return false;
+        }
+        *out_item = (*rb).buffer[(*rb).head];
+        (*rb).head = ((*rb).head + 1) % 8;
+        (*rb).count = (*rb).count - 1;
+        return true;
+    }
+}
+
+// Global backing storage for hashmap
+static mut g_map_entries: [HashEntry; 16] = 0;
+
+pub fn main() -> i32 {
+    // 1. Validate RingBuffer
+    let mut rb: RingBuffer = ring_new();
+    let p1: bool = ring_push(&rb, 10);
+    let p2: bool = ring_push(&rb, 20);
+    let p3: bool = ring_push(&rb, 30);
+    probe p1 && p2 && p3, "Ring push 3 elements should succeed";
+
+    let mut popped: u32 = 0;
+    let ok_pop: bool = ring_pop(&rb, &popped as *mut u32);
+    probe ok_pop && popped == 10, "First popped element must be 10 (FIFO)";
+
+    // 2. Validate HashMap
+    let mut hm: HashMapU64 = hashmap_new(g_map_entries as *mut HashEntry, 16);
+    hashmap_insert(&hm, 100, 1000);
+    hashmap_insert(&hm, 200, 2000);
+    hashmap_insert(&hm, 300, 3000);
+
+    let opt2: OptionU32 = hashmap_get(&hm, 200);
+    probe opt2.has_value && opt2.value == 2000, "Map lookup for 200 should return 2000";
+
+    // 3. Slice Combinators
+    let mut numbers: [u32; 4] = 0;
+    numbers[0] = 10;
+    numbers[1] = 20;
+    numbers[2] = 30;
+    numbers[3] = 40;
+
+    let total: u32 = slice_fold_u32(numbers as *const u32, 4, 0, false);
+    probe total == 100, "Slice fold sum should be 100";
+
+    let has_30: bool = slice_contains_u32(numbers as *const u32, 4, 30);
+    probe has_30, "Slice should contain 30";
+
+    return 0;
+}

@@ -1,0 +1,52 @@
+module system::time;
+
+import system::intrinsics::*;
+
+// Duration representation (seconds and nanoseconds)
+pub struct Duration {
+    pub secs: u64;
+    pub nanos: u32;
+}
+
+pub fn duration_from_secs(secs: u64) -> Duration {
+    let mut d: Duration = 0;
+    d.secs = secs;
+    d.nanos = 0;
+    return d;
+}
+
+pub fn duration_from_millis(ms: u64) -> Duration {
+    let mut d: Duration = 0;
+    d.secs = ms / 1000;
+    d.nanos = ((ms % 1000) * 1000000) as u32;
+    return d;
+}
+
+pub fn duration_as_millis(d: Duration) -> u64 {
+    return (d.secs * 1000) + (d.nanos as u64 / 1000000);
+}
+
+pub fn duration_as_secs(d: Duration) -> u64 {
+    return d.secs;
+}
+
+// Instant representation (monotonic CPU clock cycles)
+pub struct Instant {
+    pub ticks: u64;
+}
+
+@system
+pub fn now() -> Instant {
+    let mut inst: Instant = 0;
+    unsafe {
+        inst.ticks = rdtsc();
+    }
+    return inst;
+}
+
+pub fn instant_elapsed_ticks(start: Instant, current: Instant) -> u64 {
+    if current.ticks < start.ticks {
+        return 0;
+    }
+    return current.ticks - start.ticks;
+}

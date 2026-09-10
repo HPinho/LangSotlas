@@ -1,0 +1,116 @@
+module core::iter;
+
+// Range iterator for unsigned 32-bit integers
+pub struct RangeU32 {
+    pub current: u32;
+    pub end: u32;
+    pub step: u32;
+}
+
+pub fn range(start: u32, end: u32) -> RangeU32 {
+    let mut r: RangeU32 = 0;
+    r.current = start;
+    r.end = end;
+    r.step = 1;
+    return r;
+}
+
+pub fn range_step(start: u32, end: u32, step: u32) -> RangeU32 {
+    let mut r: RangeU32 = 0;
+    r.current = start;
+    r.end = end;
+    r.step = step;
+    return r;
+}
+
+pub fn range_has_next(r: *const RangeU32) -> bool {
+    if r == null {
+        return false;
+    }
+    unsafe {
+        return (*r).current < (*r).end;
+    }
+}
+
+pub fn range_next(r: *mut RangeU32, out_val: *mut u32) -> bool {
+    if r == null || out_val == null {
+        return false;
+    }
+    unsafe {
+        if (*r).current >= (*r).end {
+            return false;
+        }
+        *out_val = (*r).current;
+        (*r).current = (*r).current + (*r).step;
+        return true;
+    }
+}
+
+// Slice Iteration Combinators
+pub fn slice_contains_u32(slice: *const u32, len: usize, target: u32) -> bool {
+    if slice == null || len == 0 {
+        return false;
+    }
+    let mut i: usize = 0;
+    unsafe {
+        while i < len {
+            if *(slice + i) == target {
+                return true;
+            }
+            i = i + 1;
+        }
+    }
+    return false;
+}
+
+pub fn slice_find_u32(slice: *const u32, len: usize, target: u32) -> i64 {
+    if slice == null || len == 0 {
+        return -1;
+    }
+    let mut i: usize = 0;
+    unsafe {
+        while i < len {
+            if *(slice + i) == target {
+                return i as i64;
+            }
+            i = i + 1;
+        }
+    }
+    return -1;
+}
+
+pub fn slice_count_u32(slice: *const u32, len: usize, target: u32) -> usize {
+    if slice == null || len == 0 {
+        return 0;
+    }
+    let mut count: usize = 0;
+    let mut i: usize = 0;
+    unsafe {
+        while i < len {
+            if *(slice + i) == target {
+                count = count + 1;
+            }
+            i = i + 1;
+        }
+    }
+    return count;
+}
+
+pub fn slice_fold_u32(slice: *const u32, len: usize, initial: u32, is_multiply: bool) -> u32 {
+    if slice == null || len == 0 {
+        return initial;
+    }
+    let mut acc: u32 = initial;
+    let mut i: usize = 0;
+    unsafe {
+        while i < len {
+            if is_multiply {
+                acc = acc * *(slice + i);
+            } else {
+                acc = acc + *(slice + i);
+            }
+            i = i + 1;
+        }
+    }
+    return acc;
+}

@@ -1,0 +1,37 @@
+module test::fmt_native;
+
+import core::fmt::*;
+import core::string::*;
+
+static mut g_fmt_buf: [u8; 64] = 0;
+
+pub fn main() -> i32 {
+    let mut f: Formatter = formatter_new(g_fmt_buf as *mut u8, 64);
+
+    // 1. Test string writing
+    let ok_s: bool = write_str(&mut f, "answer=" as *const u8);
+    probe ok_s, "write_str should succeed";
+
+    // 2. Test decimal u64 writing
+    let ok_num: bool = write_u64(&mut f, 42);
+    probe ok_num, "write_u64 should succeed";
+
+    // 3. Test hex writing
+    let ok_sep: bool = write_str(&mut f, " hex=" as *const u8);
+    let ok_hex: bool = write_hex(&mut f, 255); // 0xFF
+    probe ok_sep && ok_hex, "write_hex should succeed";
+
+    // 4. Test boolean writing
+    let ok_sep2: bool = write_str(&mut f, " ok=" as *const u8);
+    let ok_b: bool = write_bool(&mut f, true);
+    probe ok_sep2 && ok_b, "write_bool should succeed";
+
+    let len: usize = formatter_len(&f);
+    probe len > 15, "Formatted string length should be non-trivial";
+
+    // 5. Test clear
+    formatter_clear(&mut f);
+    probe formatter_len(&f) == 0, "Length after clear must be 0";
+
+    return 0;
+}

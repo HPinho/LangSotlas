@@ -1,0 +1,103 @@
+module core::io;
+
+import core::string::*;
+
+pub struct BufferReader {
+    pub data: *const u8;
+    pub length: usize;
+    pub offset: usize;
+}
+
+pub fn buffer_reader_new(data: *const u8, len: usize) -> BufferReader {
+    let mut r: BufferReader = 0;
+    r.data = data;
+    r.length = len;
+    r.offset = 0;
+    return r;
+}
+
+pub fn buffer_reader_read_byte(r: *mut BufferReader) -> i32 {
+    if r == null {
+        return -1;
+    }
+    unsafe {
+        if r.data == null || r.offset >= r.length {
+            return -1;
+        }
+        let b: u8 = r.data[r.offset];
+        r.offset = r.offset + 1;
+        return b as i32;
+    }
+}
+
+pub fn buffer_reader_read(r: *mut BufferReader, dest: *mut u8, max_len: usize) -> usize {
+    if r == null || dest == null || max_len == 0 {
+        return 0;
+    }
+    unsafe {
+        if r.data == null || r.offset >= r.length {
+            return 0;
+        }
+        let mut count: usize = r.length - r.offset;
+        if count > max_len {
+            count = max_len;
+        }
+        let mut i: usize = 0;
+        while i < count {
+            dest[i] = r.data[r.offset + i];
+            i = i + 1;
+        }
+        r.offset = r.offset + count;
+        return count;
+    }
+}
+
+pub struct BufferWriter {
+    pub buffer: *mut u8;
+    pub capacity: usize;
+    pub length: usize;
+}
+
+pub fn buffer_writer_new(buffer: *mut u8, cap: usize) -> BufferWriter {
+    let mut w: BufferWriter = 0;
+    w.buffer = buffer;
+    w.capacity = cap;
+    w.length = 0;
+    return w;
+}
+
+pub fn buffer_writer_write_byte(w: *mut BufferWriter, byte: u8) -> bool {
+    if w == null {
+        return false;
+    }
+    unsafe {
+        if w.buffer == null || w.length >= w.capacity {
+            return false;
+        }
+        w.buffer[w.length] = byte;
+        w.length = w.length + 1;
+        return true;
+    }
+}
+
+pub fn buffer_writer_write(w: *mut BufferWriter, src: *const u8, len: usize) -> usize {
+    if w == null || src == null || len == 0 {
+        return 0;
+    }
+    unsafe {
+        if w.buffer == null || w.length >= w.capacity {
+            return 0;
+        }
+        let mut count: usize = w.capacity - w.length;
+        if count > len {
+            count = len;
+        }
+        let mut i: usize = 0;
+        while i < count {
+            w.buffer[w.length + i] = src[i];
+            i = i + 1;
+        }
+        w.length = w.length + count;
+        return count;
+    }
+}

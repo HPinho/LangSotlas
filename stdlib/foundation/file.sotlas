@@ -1,10 +1,18 @@
 module foundation::file;
 
+// ----------------------------------------------------------------------------
+// foundation::file — Deterministic File & Stream Descriptor
+// ----------------------------------------------------------------------------
+//
+// In baremetal/kernel mode, handles represent raw storage device blocks / partitions.
+// In hosted mode, handles map directly to POSIX/Win32 file descriptors.
+// ----------------------------------------------------------------------------
+
 pub enum FileMode {
-    ReadOnly,
-    WriteOnly,
-    ReadWrite,
-    Append
+    ReadOnly = 0,
+    WriteOnly = 1,
+    ReadWrite = 2,
+    Append = 3
 }
 
 pub struct FileHandle {
@@ -13,56 +21,49 @@ pub struct FileHandle {
     pub mode: FileMode;
 }
 
-// Abstração de I/O de arquivo para ambientes hospedados (Hosted OS)
-pub class File {
-    handle: FileHandle;
+pub struct File {
+    pub handle: FileHandle;
+}
 
-    pub fn new() -> File {
-        let mut f: File = 0;
-        f.handle = FileHandle {
-            fd: -1,
-            is_open: false,
-            mode: FileMode::ReadOnly
-        };
-        return f;
+pub fn file_new() -> File {
+    let mut f: File = 0;
+    f.handle.fd = -1;
+    f.handle.is_open = false;
+    f.handle.mode = FileMode::ReadOnly;
+    return f;
+}
+
+pub fn file_from_raw_fd(fd: i32, mode: FileMode) -> File {
+    let mut f: File = 0;
+    f.handle.fd = fd;
+    f.handle.is_open = fd >= 0;
+    f.handle.mode = mode;
+    return f;
+}
+
+pub fn file_is_open(f: *const File) -> bool {
+    if f == null {
+        return false;
     }
-
-    pub fn from_raw_fd(fd: i32, mode: FileMode) -> File {
-        let mut f: File = 0;
-        f.handle = FileHandle {
-            fd: fd,
-            is_open: fd >= 0,
-            mode: mode
-        };
-        return f;
+    unsafe {
+        return (*f).handle.is_open;
     }
+}
 
-    pub fn is_open(self: *const File) -> bool {
-        if self == null {
-            return false;
-        }
+pub fn file_raw_descriptor(f: *const File) -> i32 {
+    if f == null {
+        return -1;
+    }
+    unsafe {
+        return (*f).handle.fd;
+    }
+}
+
+pub fn file_close(f: *mut File) {
+    if f != null {
         unsafe {
-            return self.handle.is_open;
-        }
-    }
-
-    pub fn raw_descriptor(self: *const File) -> i32 {
-        if self == null {
-            return -1;
-        }
-        unsafe {
-            return self.handle.fd;
-        }
-    }
-
-    pub fn close(self: *mut File) {
-        if self != null {
-            unsafe {
-                if self.handle.is_open {
-                    self.handle.is_open = false;
-                    self.handle.fd = -1;
-                }
-            }
+            (*f).handle.fd = -1;
+            (*f).handle.is_open = false;
         }
     }
 }

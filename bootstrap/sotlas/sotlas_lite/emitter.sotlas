@@ -15,8 +15,10 @@ pub fn type_to_c(st_type: *const u8, dest: *mut u8, max_len: usize) -> usize {
     if str_eq(st_type, "i64") { return str_copy(dest, "int64_t", max_len); }
     if str_eq(st_type, "isize") { return str_copy(dest, "intptr_t", max_len); }
     if str_eq(st_type, "bool") { return str_copy(dest, "bool", max_len); }
+    if str_eq(st_type, "f32") { return str_copy(dest, "float", max_len); }
+    if str_eq(st_type, "f64") { return str_copy(dest, "double", max_len); }
     if str_eq(st_type, "void") { return str_copy(dest, "void", max_len); }
-    return str_copy(dest, st_type, max_len);
+    return 0;
 }
 
 @system
@@ -30,7 +32,10 @@ pub fn format_type(tokens: *const Token, tok_count: usize, idx: usize, dest: *mu
             if (idx + 1 < tok_count) && str_eq(tokens[idx + 1].text as *const u8, "const") {
                 if idx + 2 < tok_count {
                     let mut base: [u8; 32] = 0;
-                    type_to_c(tokens[idx + 2].text as *const u8, base as *mut u8, 32);
+                    let base_name: *const u8 = tokens[idx + 2].text as *const u8;
+                    if type_to_c(base_name, base as *mut u8, 32) == 0 {
+                        str_copy(base as *mut u8, base_name, 32);
+                    }
                     str_copy(dest, "const ", max_len);
                     str_concat(dest, base as *const u8, max_len);
                     str_concat(dest, "*", max_len);
@@ -39,14 +44,46 @@ pub fn format_type(tokens: *const Token, tok_count: usize, idx: usize, dest: *mu
             } else if (idx + 1 < tok_count) && str_eq(tokens[idx + 1].text as *const u8, "mut") {
                 if idx + 2 < tok_count {
                     let mut base: [u8; 32] = 0;
-                    type_to_c(tokens[idx + 2].text as *const u8, base as *mut u8, 32);
+                    let base_name: *const u8 = tokens[idx + 2].text as *const u8;
+                    if type_to_c(base_name, base as *mut u8, 32) == 0 {
+                        str_copy(base as *mut u8, base_name, 32);
+                    }
                     str_copy(dest, base as *const u8, max_len);
                     str_concat(dest, "*", max_len);
                     return 3;
                 }
+            } else if (idx + 1 < tok_count) && (str_eq(tokens[idx + 1].text as *const u8, "rawphys") || str_eq(tokens[idx + 1].text as *const u8, "virtmap") || str_eq(tokens[idx + 1].text as *const u8, "portwire")) {
+                if idx + 2 < tok_count {
+                    let mut base: [u8; 32] = 0;
+                    let base_name: *const u8 = tokens[idx + 2].text as *const u8;
+                    if type_to_c(base_name, base as *mut u8, 32) == 0 {
+                        str_copy(base as *mut u8, base_name, 32);
+                    }
+                    str_copy(dest, "volatile ", max_len);
+                    str_concat(dest, base as *const u8, max_len);
+                    str_concat(dest, "*", max_len);
+                    return 3;
+                }
+            } else if (idx + 1 < tok_count) && str_eq(tokens[idx + 1].text as *const u8, "dmazone") {
+                if idx + 2 < tok_count {
+                    let mut base: [u8; 32] = 0;
+                    let base_name: *const u8 = tokens[idx + 2].text as *const u8;
+                    if type_to_c(base_name, base as *mut u8, 32) == 0 {
+                        str_copy(base as *mut u8, base_name, 32);
+                    }
+                    str_copy(dest, base as *const u8, max_len);
+                    str_concat(dest, "*", max_len);
+                    return 3;
+                }
+            } else if (idx + 1 < tok_count) && str_eq(tokens[idx + 1].text as *const u8, "voidzero") {
+                str_copy(dest, "void*", max_len);
+                return 2;
             } else if idx + 1 < tok_count {
                 let mut base: [u8; 32] = 0;
-                type_to_c(tokens[idx + 1].text as *const u8, base as *mut u8, 32);
+                let base_name: *const u8 = tokens[idx + 1].text as *const u8;
+                if type_to_c(base_name, base as *mut u8, 32) == 0 {
+                    str_copy(base as *mut u8, base_name, 32);
+                }
                 str_copy(dest, base as *const u8, max_len);
                 str_concat(dest, "*", max_len);
                 return 2;
@@ -55,22 +92,51 @@ pub fn format_type(tokens: *const Token, tok_count: usize, idx: usize, dest: *mu
             if (idx + 1 < tok_count) && str_eq(tokens[idx + 1].text as *const u8, "mut") {
                 if idx + 2 < tok_count {
                     let mut base: [u8; 32] = 0;
-                    type_to_c(tokens[idx + 2].text as *const u8, base as *mut u8, 32);
+                    let base_name: *const u8 = tokens[idx + 2].text as *const u8;
+                    if type_to_c(base_name, base as *mut u8, 32) == 0 {
+                        str_copy(base as *mut u8, base_name, 32);
+                    }
                     str_copy(dest, base as *const u8, max_len);
                     str_concat(dest, "*", max_len);
                     return 3;
                 }
             } else if idx + 1 < tok_count {
                 let mut base: [u8; 32] = 0;
-                type_to_c(tokens[idx + 1].text as *const u8, base as *mut u8, 32);
+                let base_name: *const u8 = tokens[idx + 1].text as *const u8;
+                if type_to_c(base_name, base as *mut u8, 32) == 0 {
+                    str_copy(base as *mut u8, base_name, 32);
+                }
                 str_copy(dest, "const ", max_len);
                 str_concat(dest, base as *const u8, max_len);
                 str_concat(dest, "*", max_len);
                 return 2;
             }
         }
-        type_to_c(t0, dest, max_len);
-        return 1;
+        let mut consumed: usize = 1;
+        if type_to_c(t0, dest, max_len) == 0 {
+            str_copy(dest, t0, max_len);
+        }
+        if (idx + consumed + 1 < tok_count) && str_eq(tokens[idx + consumed].text as *const u8, "forge") && str_eq(tokens[idx + consumed + 1].text as *const u8, "<") {
+            consumed = consumed + 2;
+            let mut depth: usize = 1;
+            while (idx + consumed < tok_count) && depth > 0 {
+                let t_ang: *const u8 = tokens[idx + consumed].text as *const u8;
+                if str_eq(t_ang, "<") {
+                    depth = depth + 1;
+                } else if str_eq(t_ang, ">") {
+                    depth = depth - 1;
+                } else if depth == 1 && !str_eq(t_ang, ",") {
+                    let mut garg_c: [u8; 32] = 0;
+                    if type_to_c(t_ang, garg_c as *mut u8, 32) == 0 {
+                        str_copy(garg_c as *mut u8, t_ang, 32);
+                    }
+                    str_concat(dest, "_", max_len);
+                    str_concat(dest, garg_c as *const u8, max_len);
+                }
+                consumed = consumed + 1;
+            }
+        }
+        return consumed;
     }
 }
 
@@ -89,48 +155,73 @@ pub fn apply_cast_in_buffer(out_buf: *mut u8, cast_type: *const u8, max_len: usi
             return;
         }
 
-        let mut insert_pos: usize = 0;
-        if out_buf[cur_len - 1] == 41 { // ')'
-            let mut depth: usize = 1;
-            let mut p: usize = cur_len - 1;
-            while p > 0 && depth > 0 {
-                p = p - 1;
-                if out_buf[p] == 41 { // ')'
-                    depth = depth + 1;
-                } else if out_buf[p] == 40 { // '('
-                    depth = depth - 1;
-                    if depth == 0 {
-                        insert_pos = p;
-                        break;
-                    }
+        let mut insert_pos: usize = cur_len;
+        let mut p: usize = cur_len;
+        while p > 0 {
+            let mut prev_p: usize = p;
+            while prev_p > 0 && (out_buf[prev_p - 1] == 32 || out_buf[prev_p - 1] == 9) {
+                prev_p = prev_p - 1;
+            }
+            if prev_p == 0 {
+                insert_pos = 0;
+                break;
+            }
+            // Stop if we hit a statement boundary, assignment, or keyword "return"
+            let ch: u8 = out_buf[prev_p - 1];
+            if ch == 59 || ch == 61 || ch == 44 || ch == 123 || ch == 125 { // ';' or '=' or ',' or '{' or '}'
+                break;
+            }
+            if prev_p >= 6 && out_buf[prev_p - 1] == 110 && out_buf[prev_p - 2] == 114 && out_buf[prev_p - 3] == 117 && out_buf[prev_p - 4] == 116 && out_buf[prev_p - 5] == 101 && out_buf[prev_p - 6] == 114 { // "return"
+                break;
+            }
+            if ch == 41 { // ')'
+                let mut depth: usize = 1;
+                let mut q: usize = prev_p - 1;
+                while q > 0 && depth > 0 {
+                    q = q - 1;
+                    if out_buf[q] == 41 { depth = depth + 1; }
+                    else if out_buf[q] == 40 { depth = depth - 1; }
                 }
-            }
-        } else if out_buf[cur_len - 1] == 93 { // ']'
-            let mut depth: usize = 1;
-            let mut p: usize = cur_len - 1;
-            while p > 0 && depth > 0 {
-                p = p - 1;
-                if out_buf[p] == 93 { // ']'
-                    depth = depth + 1;
-                } else if out_buf[p] == 91 { // '['
-                    depth = depth - 1;
+                p = q;
+                insert_pos = p;
+            } else if ch == 93 { // ']'
+                let mut depth: usize = 1;
+                let mut q: usize = prev_p - 1;
+                while q > 0 && depth > 0 {
+                    q = q - 1;
+                    if out_buf[q] == 93 { depth = depth + 1; }
+                    else if out_buf[q] == 91 { depth = depth - 1; }
                 }
-            }
-            while p > 0 && (is_alphanumeric(out_buf[p - 1]) || out_buf[p - 1] == 32) {
-                p = p - 1;
-            }
-            insert_pos = p;
-        } else {
-            let mut p: usize = cur_len;
-            while p > 0 {
-                let ch: u8 = out_buf[p - 1];
-                if is_alphanumeric(ch) || ch == 46 || ch == 45 || ch == 62 { // '.', '-', '>'
-                    p = p - 1;
-                } else {
-                    break;
+                p = q;
+                insert_pos = p;
+            } else if ch == 34 { // '"' string literal
+                let mut q: usize = prev_p - 1;
+                while q > 0 && out_buf[q - 1] != 34 {
+                    q = q - 1;
                 }
+                if q > 0 {
+                    q = q - 1;
+                }
+                p = q;
+                insert_pos = p;
+                break;
+            } else if is_alphanumeric(ch) {
+                let mut q: usize = prev_p;
+                while q > 0 && is_alphanumeric(out_buf[q - 1]) {
+                    q = q - 1;
+                }
+                p = q;
+                insert_pos = p;
+            } else if ch == 46 { // '.'
+                p = prev_p - 1;
+            } else if ch == 38 || ch == 42 { // '&' or '*'
+                p = prev_p - 1;
+                insert_pos = p;
+            } else if ch == 62 && prev_p >= 2 && out_buf[prev_p - 2] == 45 { // '->'
+                p = prev_p - 2;
+            } else {
+                break;
             }
-            insert_pos = p;
         }
 
         // Monta o prefixo de cast: '(' + cast_type + ')'
@@ -166,24 +257,307 @@ pub fn apply_cast_in_buffer(out_buf: *mut u8, cast_type: *const u8, max_len: usi
 }
 
 @system
+pub fn apply_notch_in_buffer(out_buf: *mut u8, bit_str: *const u8, max_len: usize) {
+    if out_buf == null || bit_str == null || max_len == 0 {
+        return;
+    }
+    unsafe {
+        let mut cur_len: usize = str_len(out_buf as *const u8);
+        while cur_len > 0 && (out_buf[cur_len - 1] == 32 || out_buf[cur_len - 1] == 9) {
+            cur_len = cur_len - 1;
+            out_buf[cur_len] = 0;
+        }
+        if cur_len == 0 {
+            return;
+        }
+
+        let mut insert_pos: usize = cur_len;
+        let mut p: usize = cur_len;
+        while p > 0 {
+            let mut prev_p: usize = p;
+            while prev_p > 0 && (out_buf[prev_p - 1] == 32 || out_buf[prev_p - 1] == 9) {
+                prev_p = prev_p - 1;
+            }
+            if prev_p == 0 {
+                insert_pos = 0;
+                break;
+            }
+            let ch: u8 = out_buf[prev_p - 1];
+            if ch == 41 { // ')'
+                let mut depth: usize = 1;
+                let mut q: usize = prev_p - 1;
+                while q > 0 && depth > 0 {
+                    q = q - 1;
+                    if out_buf[q] == 41 { depth = depth + 1; }
+                    else if out_buf[q] == 40 { depth = depth - 1; }
+                }
+                p = q;
+                insert_pos = p;
+            } else if ch == 93 { // ']'
+                let mut depth: usize = 1;
+                let mut q: usize = prev_p - 1;
+                while q > 0 && depth > 0 {
+                    q = q - 1;
+                    if out_buf[q] == 93 { depth = depth + 1; }
+                    else if out_buf[q] == 91 { depth = depth - 1; }
+                }
+                p = q;
+                insert_pos = p;
+            } else if is_alphanumeric(ch) {
+                let mut q: usize = prev_p;
+                while q > 0 && is_alphanumeric(out_buf[q - 1]) {
+                    q = q - 1;
+                }
+                p = q;
+                insert_pos = p;
+            } else if ch == 46 { // '.'
+                p = prev_p - 1;
+            } else if ch == 62 && prev_p >= 2 && out_buf[prev_p - 2] == 45 { // '->'
+                p = prev_p - 2;
+            } else {
+                break;
+            }
+        }
+
+        let base_len: usize = cur_len - insert_pos;
+        if base_len == 0 || base_len >= 256 {
+            return;
+        }
+        let mut base_buf: [u8; 256] = 0;
+        let mut b_idx: usize = 0;
+        while b_idx < base_len {
+            base_buf[b_idx] = out_buf[insert_pos + b_idx];
+            b_idx = b_idx + 1;
+        }
+        base_buf[b_idx] = 0;
+
+        out_buf[insert_pos] = 0;
+        str_concat(out_buf, "(((", max_len);
+        str_concat(out_buf, base_buf as *const u8, max_len);
+        str_concat(out_buf, ") >> (", max_len);
+        str_concat(out_buf, bit_str, max_len);
+        str_concat(out_buf, ")) & 1ULL) ", max_len);
+    }
+}
+
+@system
+pub fn apply_slit_in_buffer(out_buf: *mut u8, lo_str: *const u8, hi_str: *const u8, max_len: usize) {
+    if out_buf == null || lo_str == null || hi_str == null || max_len == 0 {
+        return;
+    }
+    unsafe {
+        let mut cur_len: usize = str_len(out_buf as *const u8);
+        while cur_len > 0 && (out_buf[cur_len - 1] == 32 || out_buf[cur_len - 1] == 9) {
+            cur_len = cur_len - 1;
+            out_buf[cur_len] = 0;
+        }
+        if cur_len == 0 {
+            return;
+        }
+
+        let mut insert_pos: usize = cur_len;
+        let mut p: usize = cur_len;
+        while p > 0 {
+            let mut prev_p: usize = p;
+            while prev_p > 0 && (out_buf[prev_p - 1] == 32 || out_buf[prev_p - 1] == 9) {
+                prev_p = prev_p - 1;
+            }
+            if prev_p == 0 {
+                insert_pos = 0;
+                break;
+            }
+            let ch: u8 = out_buf[prev_p - 1];
+            if ch == 41 { // ')'
+                let mut depth: usize = 1;
+                let mut q: usize = prev_p - 1;
+                while q > 0 && depth > 0 {
+                    q = q - 1;
+                    if out_buf[q] == 41 { depth = depth + 1; }
+                    else if out_buf[q] == 40 { depth = depth - 1; }
+                }
+                p = q;
+                insert_pos = p;
+            } else if ch == 93 { // ']'
+                let mut depth: usize = 1;
+                let mut q: usize = prev_p - 1;
+                while q > 0 && depth > 0 {
+                    q = q - 1;
+                    if out_buf[q] == 93 { depth = depth + 1; }
+                    else if out_buf[q] == 91 { depth = depth - 1; }
+                }
+                p = q;
+                insert_pos = p;
+            } else if is_alphanumeric(ch) {
+                let mut q: usize = prev_p;
+                while q > 0 && is_alphanumeric(out_buf[q - 1]) {
+                    q = q - 1;
+                }
+                p = q;
+                insert_pos = p;
+            } else if ch == 46 { // '.'
+                p = prev_p - 1;
+            } else if ch == 62 && prev_p >= 2 && out_buf[prev_p - 2] == 45 { // '->'
+                p = prev_p - 2;
+            } else {
+                break;
+            }
+        }
+
+        let base_len: usize = cur_len - insert_pos;
+        if base_len == 0 || base_len >= 256 {
+            return;
+        }
+        let mut base_buf: [u8; 256] = 0;
+        let mut b_idx: usize = 0;
+        while b_idx < base_len {
+            base_buf[b_idx] = out_buf[insert_pos + b_idx];
+            b_idx = b_idx + 1;
+        }
+        base_buf[b_idx] = 0;
+
+        out_buf[insert_pos] = 0;
+        str_concat(out_buf, "(((", max_len);
+        str_concat(out_buf, base_buf as *const u8, max_len);
+        str_concat(out_buf, ") >> (", max_len);
+        str_concat(out_buf, lo_str, max_len);
+        str_concat(out_buf, ")) & ((1ULL << ((", max_len);
+        str_concat(out_buf, hi_str, max_len);
+        str_concat(out_buf, ") - (", max_len);
+        str_concat(out_buf, lo_str, max_len);
+        str_concat(out_buf, ") + 1)) - 1ULL)) ", max_len);
+    }
+}
+
+@system
+pub fn apply_strand_in_buffer(out_buf: *mut u8, max_len: usize) {
+    if out_buf == null || max_len == 0 {
+        return;
+    }
+    unsafe {
+        let mut cur_len: usize = str_len(out_buf as *const u8);
+        while cur_len > 0 && (out_buf[cur_len - 1] == 32 || out_buf[cur_len - 1] == 9) {
+            cur_len = cur_len - 1;
+            out_buf[cur_len] = 0;
+        }
+        if cur_len == 0 {
+            return;
+        }
+
+        let mut insert_pos: usize = cur_len;
+        let mut p: usize = cur_len;
+        while p > 0 {
+            let mut prev_p: usize = p;
+            while prev_p > 0 && (out_buf[prev_p - 1] == 32 || out_buf[prev_p - 1] == 9) {
+                prev_p = prev_p - 1;
+            }
+            if prev_p == 0 {
+                insert_pos = 0;
+                break;
+            }
+            let ch: u8 = out_buf[prev_p - 1];
+            if ch == 41 {
+                let mut depth: usize = 1;
+                let mut q: usize = prev_p - 1;
+                while q > 0 && depth > 0 {
+                    q = q - 1;
+                    if out_buf[q] == 41 { depth = depth + 1; }
+                    else if out_buf[q] == 40 { depth = depth - 1; }
+                }
+                p = q;
+                insert_pos = p;
+            } else if ch == 93 {
+                let mut depth: usize = 1;
+                let mut q: usize = prev_p - 1;
+                while q > 0 && depth > 0 {
+                    q = q - 1;
+                    if out_buf[q] == 93 { depth = depth + 1; }
+                    else if out_buf[q] == 91 { depth = depth - 1; }
+                }
+                p = q;
+                insert_pos = p;
+            } else if is_alphanumeric(ch) {
+                let mut q: usize = prev_p;
+                while q > 0 && is_alphanumeric(out_buf[q - 1]) {
+                    q = q - 1;
+                }
+                p = q;
+                insert_pos = p;
+            } else if ch == 46 {
+                p = prev_p - 1;
+            } else if ch == 62 && prev_p >= 2 && out_buf[prev_p - 2] == 45 {
+                p = prev_p - 2;
+            } else {
+                break;
+            }
+        }
+
+        let base_len: usize = cur_len - insert_pos;
+        if base_len == 0 || base_len >= 256 {
+            return;
+        }
+        let mut base_buf: [u8; 256] = 0;
+        let mut b_idx: usize = 0;
+        while b_idx < base_len {
+            base_buf[b_idx] = out_buf[insert_pos + b_idx];
+            b_idx = b_idx + 1;
+        }
+        base_buf[b_idx] = 0;
+
+        out_buf[insert_pos] = 0;
+        str_concat(out_buf, "__builtin_bswap64(", max_len);
+        str_concat(out_buf, base_buf as *const u8, max_len);
+        str_concat(out_buf, ") ", max_len);
+    }
+}
+
+static mut g_defer_tokens_text: [u8; 4096] = 0;
+static mut g_defer_offsets: [usize; 64] = 0;
+static mut g_defer_scopes: [usize; 64] = 0;
+
+@system
 pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut u8, max_len: usize) -> usize {
     if tokens == null || out_buf == null || max_len == 0 {
         return 0;
     }
-    str_copy(out_buf, "/* Gerado pelo Sotlas Native Compiler (Self-Hosted Architecture) */\n", max_len);
-    str_concat(out_buf, "#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n", max_len);
-    str_concat(out_buf, "#if defined(__GNUC__) || defined(__clang__)\n#pragma GCC diagnostic ignored \"-Wunused-function\"\n#pragma GCC diagnostic ignored \"-Wparentheses-equality\"\n#endif\n\n", max_len);
+    str_copy(out_buf, "/* sotlas v1.0 — native c11 codegen */\n", max_len);
+    str_concat(out_buf, "#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n#undef min\n#undef max\n\n", max_len);
+    str_concat(out_buf, "#if defined(__GNUC__) || defined(__clang__)\n", max_len);
+    str_concat(out_buf, "#pragma GCC diagnostic ignored \"-Wunused-function\"\n", max_len);
+    str_concat(out_buf, "#pragma GCC diagnostic ignored \"-Wparentheses-equality\"\n", max_len);
+    str_concat(out_buf, "#pragma GCC diagnostic ignored \"-Wpointer-sign\"\n", max_len);
+    str_concat(out_buf, "#pragma GCC diagnostic ignored \"-Wincompatible-library-redeclaration\"\n#endif\n\n", max_len);
     str_concat(out_buf, "static inline void __pause(void) { __asm__ volatile (\"pause\"); }\n", max_len);
     str_concat(out_buf, "static inline void __cli(void) { __asm__ volatile (\"cli\"); }\n", max_len);
-    str_concat(out_buf, "static inline void __sti(void) { __asm__ volatile (\"sti\"); }\n\n", max_len);
+    str_concat(out_buf, "static inline void __sti(void) { __asm__ volatile (\"sti\"); }\n", max_len);
+    str_concat(out_buf, "#ifndef offsetof\n#define offsetof(type, member) ((size_t)&(((type*)0)->member))\n#endif\n", max_len);
+    str_concat(out_buf, "static inline uint64_t __irq_save_disable(void) {\n    uint64_t flags = 0;\n#if (defined(__x86_64__) || defined(_M_X64)) && !defined(_WIN32)\n    __asm__ volatile (\"pushfq; popq %0; cli\" : \"=r\"(flags) : : \"memory\");\n#endif\n    return flags;\n}\n", max_len);
+    str_concat(out_buf, "static inline void __irq_restore(uint64_t flags) {\n#if (defined(__x86_64__) || defined(_M_X64)) && !defined(_WIN32)\n    __asm__ volatile (\"pushq %0; popfq\" : : \"r\"(flags) : \"memory\");\n#else\n    (void)flags;\n#endif\n}\n", max_len);
+    str_concat(out_buf, "static inline void __dma_fence(void) { __asm__ volatile (\"\" ::: \"memory\"); }\n", max_len);
+    str_concat(out_buf, "static inline void __sfence(void) { __asm__ volatile (\"\" ::: \"memory\"); }\n", max_len);
+    str_concat(out_buf, "static inline void __lfence(void) { __asm__ volatile (\"\" ::: \"memory\"); }\n", max_len);
+    str_concat(out_buf, "static inline void __cpu_pause(void) { __asm__ volatile (\"pause\"); }\n", max_len);
+    str_concat(out_buf, "static inline uint32_t __atomic_exchange_u32(uint64_t address, uint32_t value) {\n    return __atomic_exchange_n((uint32_t*)(uintptr_t)address, value, __ATOMIC_SEQ_CST);\n}\n", max_len);
+    str_concat(out_buf, "static inline uint64_t __atomic_exchange_u64(uint64_t address, uint64_t value) {\n    return __atomic_exchange_n((uint64_t*)(uintptr_t)address, value, __ATOMIC_SEQ_CST);\n}\n", max_len);
+    str_concat(out_buf, "static inline uint32_t __atomic_load_u32(uint64_t address) {\n    return *(volatile uint32_t*)(uintptr_t)address;\n}\n", max_len);
+    str_concat(out_buf, "static inline uint64_t __atomic_load_u64(uint64_t address) {\n    return *(volatile uint64_t*)(uintptr_t)address;\n}\n", max_len);
+    str_concat(out_buf, "static inline void __atomic_store_u32(uint64_t address, uint32_t value) {\n    *(volatile uint32_t*)(uintptr_t)address = value;\n}\n", max_len);
+    str_concat(out_buf, "static inline void __atomic_store_u64(uint64_t address, uint64_t value) {\n    *(volatile uint64_t*)(uintptr_t)address = value;\n}\n", max_len);
+    str_concat(out_buf, "static inline bool __atomic_cmpxchg_u32(uint64_t address, uint32_t expected, uint32_t desired) {\n    return __atomic_compare_exchange_n((uint32_t*)(uintptr_t)address, &expected, desired, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);\n}\n", max_len);
+    str_concat(out_buf, "#if defined(_MSC_VER)\n#include <intrin.h>\n#define rdtsc __rdtsc\n#else\n", max_len);
+    str_concat(out_buf, "static inline uint64_t rdtsc(void) { uint32_t lo, hi; __asm__ volatile (\"rdtsc\" : \"=a\"(lo), \"=d\"(hi)); return ((uint64_t)hi << 32) | lo; }\n#endif\n", max_len);
+    str_concat(out_buf, "static inline bool __interrupts_enabled(void) { return false; }\n\n", max_len);
 
     let mut i: usize = 0;
+    let mut discern_depth: usize = 0;
+    let mut case_arm_depth: usize = 0;
+    let mut defer_count: usize = 0;
+    let mut defer_text_len: usize = 0;
+    let mut block_depth: usize = 0;
     unsafe {
         while i < tok_count {
-            let tok: *const Token = &tokens[i];
-            let txt: *const u8 = tok.text as *const u8;
+            let txt: *const u8 = tokens[i].text as *const u8;
 
-            if tok.kind == TokenKind::Eof {
+            if tokens[i].kind == TokenKind::Eof {
                 break;
             }
 
@@ -198,22 +572,68 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 continue;
             }
 
-            // Ignora qualificadores e atributos
-            if str_eq(txt, "pub") || str_eq(txt, "unsafe") || str_eq(txt, "@system") ||
-               str_eq(txt, "@export") || str_eq(txt, "@inline") || str_eq(txt, "@repr(C)") {
+            // Ignora qualificadores e atributos gerais
+            if str_eq(txt, "pub") || str_eq(txt, "sole") || str_eq(txt, "unsafe") || str_eq(txt, "@system") ||
+               str_eq(txt, "@export") || str_eq(txt, "@inline") || str_eq(txt, "@repr(C)") || str_eq(txt, "handover") {
                 i = i + 1;
                 continue;
             }
 
-            // @packed struct -> typedef struct __attribute__((packed))
+            // Atributos de kernel e baixo nível
             if str_eq(txt, "@packed") {
                 str_concat(out_buf, "__attribute__((packed)) ", max_len);
                 i = i + 1;
                 continue;
             }
+            if str_eq(txt, "@naked") {
+                str_concat(out_buf, "__attribute__((naked)) ", max_len);
+                i = i + 1;
+                continue;
+            }
+            if str_eq(txt, "@interrupt") {
+                str_concat(out_buf, "__attribute__((interrupt)) ", max_len);
+                i = i + 1;
+                continue;
+            }
+            if str_eq(txt, "@noinline") {
+                str_concat(out_buf, "__attribute__((noinline)) ", max_len);
+                i = i + 1;
+                continue;
+            }
+            if str_eq(txt, "@noreturn") {
+                str_concat(out_buf, "__attribute__((noreturn)) ", max_len);
+                i = i + 1;
+                continue;
+            }
+            if str_starts_with(txt, "@section(") {
+                str_concat(out_buf, "__attribute__((section(", max_len);
+                let mut p_sec: usize = 9;
+                while txt[p_sec] != 0 && txt[p_sec] != 41 {
+                    let mut ch_sec: [u8; 2] = 0;
+                    ch_sec[0] = txt[p_sec];
+                    str_concat(out_buf, ch_sec as *const u8, max_len);
+                    p_sec = p_sec + 1;
+                }
+                str_concat(out_buf, "))) ", max_len);
+                i = i + 1;
+                continue;
+            }
+            if str_starts_with(txt, "@aligned(") {
+                str_concat(out_buf, "__attribute__((aligned(", max_len);
+                let mut p_al: usize = 9;
+                while txt[p_al] != 0 && txt[p_al] != 41 {
+                    let mut ch_al: [u8; 2] = 0;
+                    ch_al[0] = txt[p_al];
+                    str_concat(out_buf, ch_al as *const u8, max_len);
+                    p_al = p_al + 1;
+                }
+                str_concat(out_buf, "))) ", max_len);
+                i = i + 1;
+                continue;
+            }
 
-            // null -> NULL
-            if str_eq(txt, "null") {
+            // null / nil -> NULL
+            if str_eq(txt, "null") || str_eq(txt, "nil") {
                 str_concat(out_buf, "NULL ", max_len);
                 i = i + 1;
                 continue;
@@ -226,10 +646,233 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 continue;
             }
 
-            // break
+            // for var in start..end {
+            if str_eq(txt, "for") && (i + 5 < tok_count) {
+                let var_name: *const u8 = tokens[i + 1].text as *const u8;
+                if str_eq(tokens[i + 2].text as *const u8, "in") {
+                    let start_val: *const u8 = tokens[i + 3].text as *const u8;
+                    if str_eq(tokens[i + 4].text as *const u8, "..") {
+                        let end_val: *const u8 = tokens[i + 5].text as *const u8;
+                        str_concat(out_buf, "for (int64_t ", max_len);
+                        str_concat(out_buf, var_name, max_len);
+                        str_concat(out_buf, " = ", max_len);
+                        str_concat(out_buf, start_val, max_len);
+                        str_concat(out_buf, "; ", max_len);
+                        str_concat(out_buf, var_name, max_len);
+                        str_concat(out_buf, " < ", max_len);
+                        str_concat(out_buf, end_val, max_len);
+                        str_concat(out_buf, "; ", max_len);
+                        str_concat(out_buf, var_name, max_len);
+                        str_concat(out_buf, "++) ", max_len);
+                        i = i + 6;
+                        continue;
+                    }
+                }
+            }
+
+            // break / continue
             if str_eq(txt, "break") {
                 str_concat(out_buf, "break; ", max_len);
                 i = i + 1;
+                continue;
+            }
+            if str_eq(txt, "continue") {
+                str_concat(out_buf, "continue; ", max_len);
+                i = i + 1;
+                continue;
+            }
+
+            // pulse -> barreira de hardware (mfence)
+            if str_eq(txt, "pulse") {
+                i = i + 1;
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "(") {
+                    while i < tok_count && !str_eq(tokens[i].text as *const u8, ")") {
+                        i = i + 1;
+                    }
+                    if i < tok_count {
+                        i = i + 1;
+                    }
+                }
+                if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                    i = i + 1;
+                }
+                str_concat(out_buf, "__asm__ volatile(\"mfence\" ::: \"memory\");\n", max_len);
+                continue;
+            }
+
+            // probe cond; ou probe(cond); ou probe cond, "msg"; -> asserção e trap de hardware
+            if str_eq(txt, "probe") {
+                i = i + 1;
+                let mut paren_depth: usize = 0;
+                str_concat(out_buf, "if (!(", max_len);
+                let mut has_msg: bool = false;
+                let mut msg_buf: [u8; 128] = 0;
+                while i < tok_count && !str_eq(tokens[i].text as *const u8, ";") {
+                    let cur_tok: *const u8 = tokens[i].text as *const u8;
+                    if str_eq(cur_tok, "(") {
+                        paren_depth = paren_depth + 1;
+                    } else if str_eq(cur_tok, ")") {
+                        if paren_depth > 0 {
+                            paren_depth = paren_depth - 1;
+                        }
+                    } else if str_eq(cur_tok, ",") && paren_depth == 0 {
+                        i = i + 1;
+                        if i < tok_count {
+                            str_copy(msg_buf as *mut u8, tokens[i].text as *const u8, 128);
+                            has_msg = true;
+                            i = i + 1;
+                        }
+                        while i < tok_count && !str_eq(tokens[i].text as *const u8, ";") {
+                            i = i + 1;
+                        }
+                        break;
+                    }
+                    if str_eq(cur_tok, ".") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "notch") {
+                        if (i + 4 < tok_count) && str_eq(tokens[i + 2].text as *const u8, "[") && str_eq(tokens[i + 4].text as *const u8, "]") {
+                            let bit_val: *const u8 = tokens[i + 3].text as *const u8;
+                            apply_notch_in_buffer(out_buf, bit_val, max_len);
+                            i = i + 5;
+                            continue;
+                        }
+                    }
+                    if str_eq(cur_tok, ".") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "slit") {
+                        if (i + 6 < tok_count) && str_eq(tokens[i + 2].text as *const u8, "[") && str_eq(tokens[i + 4].text as *const u8, "..") && str_eq(tokens[i + 6].text as *const u8, "]") {
+                            let lo_val: *const u8 = tokens[i + 3].text as *const u8;
+                            let hi_val: *const u8 = tokens[i + 5].text as *const u8;
+                            apply_slit_in_buffer(out_buf, lo_val, hi_val, max_len);
+                            i = i + 7;
+                            continue;
+                        }
+                    }
+                    if str_eq(cur_tok, ".") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "strand") {
+                        apply_strand_in_buffer(out_buf, max_len);
+                        i = i + 2;
+                        continue;
+                    }
+                    if (i + 2 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "::") {
+                        str_concat(out_buf, cur_tok, max_len);
+                        str_concat(out_buf, "_", max_len);
+                        str_concat(out_buf, tokens[i + 2].text as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        i = i + 3;
+                        continue;
+                    }
+                    if str_eq(cur_tok, "null") || str_eq(cur_tok, "nil") {
+                        str_concat(out_buf, "NULL ", max_len);
+                        i = i + 1;
+                        continue;
+                    }
+                    str_concat(out_buf, cur_tok, max_len);
+                    str_concat(out_buf, " ", max_len);
+                    i = i + 1;
+                }
+                if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                    i = i + 1;
+                }
+                str_concat(out_buf, ")) { ", max_len);
+                if has_msg {
+                    str_concat(out_buf, "(void)(", max_len);
+                    str_concat(out_buf, msg_buf as *const u8, max_len);
+                    str_concat(out_buf, "); ", max_len);
+                }
+                str_concat(out_buf, "abort(); }\n", max_len);
+                continue;
+            }
+
+            // clinch / revert -> seções críticas blindadas com salvamento de flags
+            if str_eq(txt, "clinch") {
+                str_concat(out_buf, "uint64_t _sotlas_clinch_flags = __irq_save_disable();\n", max_len);
+                i = i + 1;
+                continue;
+            }
+            if str_eq(txt, "revert") {
+                str_concat(out_buf, "__irq_restore(_sotlas_clinch_flags);\n", max_len);
+                i = i + 1;
+                continue;
+            }
+
+            // Introspecção de tipo em tempo de compilação
+            if str_eq(txt, "span_of") || str_eq(txt, "stride_of") || str_eq(txt, "align_of") {
+                let is_align: bool = str_eq(txt, "align_of");
+                i = i + 1;
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "::") {
+                    i = i + 1;
+                }
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "<") {
+                    i = i + 1;
+                    let mut t_c: [u8; 64] = 0;
+                    let consumed_t: usize = format_type(tokens, tok_count, i, t_c as *mut u8, 64);
+                    i = i + consumed_t;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ">") {
+                        i = i + 1;
+                    }
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "(") {
+                        i = i + 1;
+                    }
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ")") {
+                        i = i + 1;
+                    }
+                    if is_align {
+                        str_concat(out_buf, "_Alignof(", max_len);
+                    } else {
+                        str_concat(out_buf, "sizeof(", max_len);
+                    }
+                    str_concat(out_buf, t_c as *const u8, max_len);
+                    str_concat(out_buf, ") ", max_len);
+                    continue;
+                }
+            }
+
+            // field_offset!(Struct, field)
+            if str_eq(txt, "field_offset") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "!") {
+                i = i + 2;
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "(") {
+                    i = i + 1;
+                    let st_name: *const u8 = tokens[i].text as *const u8;
+                    i = i + 1;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ",") {
+                        i = i + 1;
+                    }
+                    let fld_name: *const u8 = tokens[i].text as *const u8;
+                    i = i + 1;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ")") {
+                        i = i + 1;
+                    }
+                    str_concat(out_buf, "offsetof(", max_len);
+                    str_concat(out_buf, st_name, max_len);
+                    str_concat(out_buf, ", ", max_len);
+                    str_concat(out_buf, fld_name, max_len);
+                    str_concat(out_buf, ") ", max_len);
+                    continue;
+                }
+            }
+
+            // forge<T> -> generic monomorphization
+            if str_eq(txt, "forge") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "<") {
+                let mut cur_len: usize = str_len(out_buf as *const u8);
+                while cur_len > 0 && out_buf[cur_len - 1] == 32 {
+                    out_buf[cur_len - 1] = 0;
+                    cur_len = cur_len - 1;
+                }
+                i = i + 2;
+                let mut depth: usize = 1;
+                while i < tok_count && depth > 0 {
+                    let t_ang: *const u8 = tokens[i].text as *const u8;
+                    if str_eq(t_ang, "<") {
+                        depth = depth + 1;
+                    } else if str_eq(t_ang, ">") {
+                        depth = depth - 1;
+                    } else if depth == 1 && !str_eq(t_ang, ",") {
+                        let mut garg_c: [u8; 32] = 0;
+                        if type_to_c(t_ang, garg_c as *mut u8, 32) == 0 {
+                            str_copy(garg_c as *mut u8, t_ang, 32);
+                        }
+                        str_concat(out_buf, "_", max_len);
+                        str_concat(out_buf, garg_c as *const u8, max_len);
+                    }
+                    i = i + 1;
+                }
+                str_concat(out_buf, " ", max_len);
                 continue;
             }
 
@@ -253,6 +896,140 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 }
             }
 
+            // static mut var: type = val;
+            if str_eq(txt, "static") {
+                i = i + 1;
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "mut") {
+                    i = i + 1;
+                }
+                let s_var_name: *const u8 = tokens[i].text as *const u8;
+                i = i + 1;
+                if i < tok_count && str_eq(tokens[i].text as *const u8, ":") {
+                    i = i + 1;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "[") {
+                        let s_arr_type: *const u8 = tokens[i + 1].text as *const u8;
+                        let s_arr_size: *const u8 = tokens[i + 3].text as *const u8;
+                        let mut s_arr_c: [u8; 32] = 0;
+                        if type_to_c(s_arr_type, s_arr_c as *mut u8, 32) == 0 {
+                            str_copy(s_arr_c as *mut u8, s_arr_type, 32);
+                        }
+                        str_concat(out_buf, "static ", max_len);
+                        str_concat(out_buf, s_arr_c as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        str_concat(out_buf, s_var_name, max_len);
+                        str_concat(out_buf, "[", max_len);
+                        str_concat(out_buf, s_arr_size, max_len);
+                        str_concat(out_buf, "] = {0};\n", max_len);
+                        i = i + 5;
+                        while i < tok_count && !str_eq(tokens[i].text as *const u8, ";") {
+                            i = i + 1;
+                        }
+                        if i < tok_count { i = i + 1; }
+                        continue;
+                    }
+                    let mut s_type_c: [u8; 64] = 0;
+                    let consumed_st: usize = format_type(tokens, tok_count, i, s_type_c as *mut u8, 64);
+                    str_concat(out_buf, "static ", max_len);
+                    str_concat(out_buf, s_type_c as *const u8, max_len);
+                    str_concat(out_buf, " ", max_len);
+                    str_concat(out_buf, s_var_name, max_len);
+                    str_concat(out_buf, " = ", max_len);
+                    i = i + consumed_st;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "=") {
+                        i = i + 1;
+                    }
+                    while i < tok_count && !str_eq(tokens[i].text as *const u8, ";") {
+                        str_concat(out_buf, tokens[i].text as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        i = i + 1;
+                    }
+                    str_concat(out_buf, ";\n", max_len);
+                    if i < tok_count { i = i + 1; }
+                    continue;
+                }
+            }
+
+            // register Definition
+            if str_eq(txt, "register") {
+                if i + 1 < tok_count {
+                    let r_name: *const u8 = tokens[i + 1].text as *const u8;
+                    i = i + 2;
+                    let mut backing_c: [u8; 32] = 0;
+                    str_copy(backing_c as *mut u8, "uint32_t", 32);
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ":") {
+                        i = i + 1;
+                        let consumed_bk: usize = format_type(tokens, tok_count, i, backing_c as *mut u8, 32);
+                        i = i + consumed_bk;
+                    }
+                    str_concat(out_buf, "typedef union ", max_len);
+                    str_concat(out_buf, r_name, max_len);
+                    str_concat(out_buf, " {\n    ", max_len);
+                    str_concat(out_buf, backing_c as *const u8, max_len);
+                    str_concat(out_buf, " raw;\n    struct __attribute__((packed)) {\n", max_len);
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        i = i + 1;
+                    }
+                    while i < tok_count && !str_eq(tokens[i].text as *const u8, "}") {
+                        let rf_name: *const u8 = tokens[i].text as *const u8;
+                        i = i + 1;
+                        if i < tok_count && str_eq(tokens[i].text as *const u8, ":") {
+                            i = i + 1;
+                            let mut rf_type_c: [u8; 32] = 0;
+                            let consumed_rft: usize = format_type(tokens, tok_count, i, rf_type_c as *mut u8, 32);
+                            i = i + consumed_rft;
+                            let mut bw_str: [u8; 16] = 0;
+                            if i < tok_count && str_eq(tokens[i].text as *const u8, ":") {
+                                i = i + 1;
+                                str_copy(bw_str as *mut u8, tokens[i].text as *const u8, 16);
+                                i = i + 1;
+                            } else if i < tok_count && str_eq(tokens[i].text as *const u8, "[") {
+                                i = i + 1;
+                                let lo_val: *const u8 = tokens[i].text as *const u8;
+                                i = i + 1;
+                                if i < tok_count && str_eq(tokens[i].text as *const u8, "..") {
+                                    i = i + 1;
+                                    let hi_val: *const u8 = tokens[i].text as *const u8;
+                                    i = i + 1;
+                                    let lo_num: u64 = str_to_u64(lo_val);
+                                    let hi_num: u64 = str_to_u64(hi_val);
+                                    let w_num: u64 = (hi_num - lo_num) + 1;
+                                    u64_to_dec(w_num, bw_str as *mut u8, 16);
+                                } else {
+                                    str_copy(bw_str as *mut u8, "1", 16);
+                                }
+                                if i < tok_count && str_eq(tokens[i].text as *const u8, "]") {
+                                    i = i + 1;
+                                }
+                            }
+                            str_concat(out_buf, "        ", max_len);
+                            str_concat(out_buf, backing_c as *const u8, max_len);
+                            str_concat(out_buf, " ", max_len);
+                            str_concat(out_buf, rf_name, max_len);
+                            if bw_str[0] != 0 {
+                                str_concat(out_buf, " : ", max_len);
+                                str_concat(out_buf, bw_str as *const u8, max_len);
+                            }
+                            str_concat(out_buf, ";\n", max_len);
+                            if i < tok_count && (str_eq(tokens[i].text as *const u8, ";") || str_eq(tokens[i].text as *const u8, ",")) {
+                                i = i + 1;
+                            }
+                        } else {
+                            i = i + 1;
+                        }
+                    }
+                    str_concat(out_buf, "    };\n} ", max_len);
+                    str_concat(out_buf, r_name, max_len);
+                    str_concat(out_buf, ";\n\n", max_len);
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "}") {
+                        i = i + 1;
+                    }
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                        i = i + 1;
+                    }
+                    continue;
+                }
+            }
+
             // struct Definition
             if str_eq(txt, "struct") {
                 if i + 1 < tok_count {
@@ -261,6 +1038,20 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                     str_concat(out_buf, s_name, max_len);
                     str_concat(out_buf, " {\n", max_len);
                     i = i + 2;
+                    let mut is_generic_struct: bool = false;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "forge") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "<") {
+                        is_generic_struct = true;
+                        i = i + 2;
+                        let mut f_depth: usize = 1;
+                        while i < tok_count && f_depth > 0 {
+                            if str_eq(tokens[i].text as *const u8, "<") {
+                                f_depth = f_depth + 1;
+                            } else if str_eq(tokens[i].text as *const u8, ">") {
+                                f_depth = f_depth - 1;
+                            }
+                            i = i + 1;
+                        }
+                    }
                     if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
                         i = i + 1;
                     }
@@ -277,7 +1068,9 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                                 let f_arr_type: *const u8 = tokens[i + 1].text as *const u8;
                                 let f_arr_size: *const u8 = tokens[i + 3].text as *const u8;
                                 let mut f_arr_c: [u8; 32] = 0;
-                                type_to_c(f_arr_type, f_arr_c as *mut u8, 32);
+                                if type_to_c(f_arr_type, f_arr_c as *mut u8, 32) == 0 {
+                                    str_copy(f_arr_c as *mut u8, f_arr_type, 32);
+                                }
                                 str_concat(out_buf, "    ", max_len);
                                 str_concat(out_buf, f_arr_c as *const u8, max_len);
                                 str_concat(out_buf, " ", max_len);
@@ -293,6 +1086,9 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                             }
                             let mut f_type_c: [u8; 64] = 0;
                             let consumed_f: usize = format_type(tokens, tok_count, i, f_type_c as *mut u8, 64);
+                            if str_len(f_type_c as *const u8) == 1 && f_type_c[0] >= 65 && f_type_c[0] <= 90 {
+                                str_copy(f_type_c as *mut u8, "uint64_t", 64);
+                            }
                             str_concat(out_buf, "    ", max_len);
                             str_concat(out_buf, f_type_c as *const u8, max_len);
                             str_concat(out_buf, " ", max_len);
@@ -309,6 +1105,13 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                     str_concat(out_buf, "} ", max_len);
                     str_concat(out_buf, s_name, max_len);
                     str_concat(out_buf, ";\n\n", max_len);
+                    if is_generic_struct {
+                        str_concat(out_buf, "#define ", max_len);
+                        str_concat(out_buf, s_name, max_len);
+                        str_concat(out_buf, "_uint32_t_int64_t ", max_len);
+                        str_concat(out_buf, s_name, max_len);
+                        str_concat(out_buf, "\n\n", max_len);
+                    }
                     if i < tok_count && str_eq(tokens[i].text as *const u8, "}") {
                         i = i + 1;
                     }
@@ -331,6 +1134,46 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                         i = i + 1;
                     }
                     while i < tok_count && !str_eq(tokens[i].text as *const u8, "}") {
+                        let t_cur: *const u8 = tokens[i].text as *const u8;
+                        if is_alpha(t_cur[0]) && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "=") {
+                            str_concat(out_buf, "    ", max_len);
+                            str_concat(out_buf, e_name, max_len);
+                            str_concat(out_buf, "_", max_len);
+                            str_concat(out_buf, t_cur, max_len);
+                            str_concat(out_buf, " = ", max_len);
+                            str_concat(out_buf, tokens[i + 2].text as *const u8, max_len);
+                            str_concat(out_buf, ",\n", max_len);
+                            str_concat(out_buf, "    ", max_len);
+                            str_concat(out_buf, t_cur, max_len);
+                            str_concat(out_buf, " = ", max_len);
+                            str_concat(out_buf, e_name, max_len);
+                            str_concat(out_buf, "_", max_len);
+                            str_concat(out_buf, t_cur, max_len);
+                            str_concat(out_buf, ",\n", max_len);
+                            i = i + 3;
+                            if i < tok_count && str_eq(tokens[i].text as *const u8, ",") {
+                                i = i + 1;
+                            }
+                            continue;
+                        } else if is_alpha(t_cur[0]) && (i + 1 < tok_count) && (str_eq(tokens[i + 1].text as *const u8, ",") || str_eq(tokens[i + 1].text as *const u8, "}")) {
+                            str_concat(out_buf, "    ", max_len);
+                            str_concat(out_buf, e_name, max_len);
+                            str_concat(out_buf, "_", max_len);
+                            str_concat(out_buf, t_cur, max_len);
+                            str_concat(out_buf, ",\n", max_len);
+                            str_concat(out_buf, "    ", max_len);
+                            str_concat(out_buf, t_cur, max_len);
+                            str_concat(out_buf, " = ", max_len);
+                            str_concat(out_buf, e_name, max_len);
+                            str_concat(out_buf, "_", max_len);
+                            str_concat(out_buf, t_cur, max_len);
+                            str_concat(out_buf, ",\n", max_len);
+                            i = i + 1;
+                            if i < tok_count && str_eq(tokens[i].text as *const u8, ",") {
+                                i = i + 1;
+                            }
+                            continue;
+                        }
                         str_concat(out_buf, tokens[i].text as *const u8, max_len);
                         str_concat(out_buf, " ", max_len);
                         i = i + 1;
@@ -441,6 +1284,9 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                     }
                     if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
                         str_concat(out_buf, "{\n", max_len);
+                        block_depth = block_depth + 1;
+                        defer_count = 0;
+                        defer_text_len = 0;
                         i = i + 1;
                     } else if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
                         str_concat(out_buf, ";\n\n", max_len);
@@ -448,6 +1294,112 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                     }
                     continue;
                 }
+            }
+
+            // defer Statement
+            if str_eq(txt, "defer") {
+                i = i + 1;
+                if defer_count < 64 {
+                    g_defer_offsets[defer_count] = defer_text_len;
+                    g_defer_scopes[defer_count] = block_depth;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        i = i + 1;
+                        let mut d_depth: usize = 1;
+                        while i < tok_count && d_depth > 0 {
+                            let t_d: *const u8 = tokens[i].text as *const u8;
+                            if str_eq(t_d, "{") {
+                                d_depth = d_depth + 1;
+                            } else if str_eq(t_d, "}") {
+                                d_depth = d_depth - 1;
+                                if d_depth == 0 {
+                                    break;
+                                }
+                            }
+                            let t_len: usize = str_len(t_d);
+                            if defer_text_len + t_len + 2 < 4096 {
+                                copy_memory((g_defer_tokens_text as *mut u8) + defer_text_len, t_d, t_len);
+                                defer_text_len = defer_text_len + t_len;
+                                g_defer_tokens_text[defer_text_len] = 32;
+                                defer_text_len = defer_text_len + 1;
+                                g_defer_tokens_text[defer_text_len] = 0;
+                            }
+                            i = i + 1;
+                        }
+                        if i < tok_count && str_eq(tokens[i].text as *const u8, "}") {
+                            i = i + 1;
+                        }
+                        if defer_text_len + 3 < 4096 {
+                            g_defer_tokens_text[defer_text_len] = 10;
+                            defer_text_len = defer_text_len + 1;
+                            g_defer_tokens_text[defer_text_len] = 0;
+                            defer_text_len = defer_text_len + 1;
+                        }
+                    } else {
+                        while i < tok_count && !str_eq(tokens[i].text as *const u8, ";") {
+                            let t_d: *const u8 = tokens[i].text as *const u8;
+                            let t_len: usize = str_len(t_d);
+                            if defer_text_len + t_len + 2 < 4096 {
+                                copy_memory((g_defer_tokens_text as *mut u8) + defer_text_len, t_d, t_len);
+                                defer_text_len = defer_text_len + t_len;
+                                g_defer_tokens_text[defer_text_len] = 32;
+                                defer_text_len = defer_text_len + 1;
+                                g_defer_tokens_text[defer_text_len] = 0;
+                            }
+                            i = i + 1;
+                        }
+                        if defer_text_len + 3 < 4096 {
+                            g_defer_tokens_text[defer_text_len] = 59;
+                            defer_text_len = defer_text_len + 1;
+                            g_defer_tokens_text[defer_text_len] = 10;
+                            defer_text_len = defer_text_len + 1;
+                            g_defer_tokens_text[defer_text_len] = 0;
+                            defer_text_len = defer_text_len + 1;
+                        }
+                        if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                            i = i + 1;
+                        }
+                    }
+                    defer_count = defer_count + 1;
+                }
+                continue;
+            }
+
+            // return Statement with LIFO defer execution
+            if str_eq(txt, "return") {
+                i = i + 1;
+                if defer_count == 0 {
+                    str_concat(out_buf, "return ", max_len);
+                    continue;
+                }
+                if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                    let mut d_idx: usize = defer_count;
+                    while d_idx > 0 {
+                        d_idx = d_idx - 1;
+                        let def_ptr: *const u8 = (g_defer_tokens_text as *const u8) + g_defer_offsets[d_idx];
+                        str_concat(out_buf, def_ptr, max_len);
+                    }
+                    str_concat(out_buf, "return;\n", max_len);
+                    i = i + 1;
+                    continue;
+                }
+                str_concat(out_buf, "__auto_type _st_ret = (", max_len);
+                while i < tok_count && !str_eq(tokens[i].text as *const u8, ";") {
+                    str_concat(out_buf, tokens[i].text as *const u8, max_len);
+                    str_concat(out_buf, " ", max_len);
+                    i = i + 1;
+                }
+                str_concat(out_buf, ");\n", max_len);
+                let mut d_idx: usize = defer_count;
+                while d_idx > 0 {
+                    d_idx = d_idx - 1;
+                    let def_ptr: *const u8 = (g_defer_tokens_text as *const u8) + g_defer_offsets[d_idx];
+                    str_concat(out_buf, def_ptr, max_len);
+                }
+                str_concat(out_buf, "return _st_ret;\n", max_len);
+                if i < tok_count && str_eq(tokens[i].text as *const u8, ";") {
+                    i = i + 1;
+                }
+                continue;
             }
 
             // let -> declaração de variável
@@ -464,7 +1416,9 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                         let arr_type: *const u8 = tokens[i + 1].text as *const u8;
                         let arr_size: *const u8 = tokens[i + 3].text as *const u8;
                         let mut arr_c: [u8; 32] = 0;
-                        type_to_c(arr_type, arr_c as *mut u8, 32);
+                        if type_to_c(arr_type, arr_c as *mut u8, 32) == 0 {
+                            str_copy(arr_c as *mut u8, arr_type, 32);
+                        }
                         str_concat(out_buf, arr_c as *const u8, max_len);
                         str_concat(out_buf, " ", max_len);
                         str_concat(out_buf, var_name, max_len);
@@ -512,6 +1466,44 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 continue;
             }
 
+            // for var in start..end { ... }
+            if str_eq(txt, "for") {
+                i = i + 1;
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "mut") {
+                    i = i + 1;
+                }
+                let v_name: *const u8 = tokens[i].text as *const u8;
+                i = i + 1;
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "in") {
+                    i = i + 1;
+                    let start_val: *const u8 = tokens[i].text as *const u8;
+                    i = i + 1;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "..") {
+                        i = i + 1;
+                        let end_val: *const u8 = tokens[i].text as *const u8;
+                        i = i + 1;
+                        str_concat(out_buf, "for (size_t ", max_len);
+                        str_concat(out_buf, v_name, max_len);
+                        str_concat(out_buf, " = ", max_len);
+                        str_concat(out_buf, start_val, max_len);
+                        str_concat(out_buf, "; ", max_len);
+                        str_concat(out_buf, v_name, max_len);
+                        str_concat(out_buf, " < ", max_len);
+                        str_concat(out_buf, end_val, max_len);
+                        str_concat(out_buf, "; ++", max_len);
+                        str_concat(out_buf, v_name, max_len);
+                        str_concat(out_buf, ") {\n", max_len);
+                        if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                            if case_arm_depth > 0 {
+                                case_arm_depth = case_arm_depth + 1;
+                            }
+                            i = i + 1;
+                        }
+                        continue;
+                    }
+                }
+            }
+
             // if e while -> garante parênteses na condição para C11
             if str_eq(txt, "if") || str_eq(txt, "while") {
                 let is_while: bool = str_eq(txt, "while");
@@ -521,17 +1513,26 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                     str_concat(out_buf, "if (", max_len);
                 }
                 i = i + 1;
-                let has_open_paren: bool = (i < tok_count) && str_eq(tokens[i].text as *const u8, "(");
-                if has_open_paren {
-                    i = i + 1;
-                }
                 while i < tok_count && !str_eq(tokens[i].text as *const u8, "{") {
-                    if has_open_paren && str_eq(tokens[i].text as *const u8, ")") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "{") {
+                    if (i + 2 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "::") {
+                        str_concat(out_buf, tokens[i].text as *const u8, max_len);
+                        str_concat(out_buf, "_", max_len);
+                        str_concat(out_buf, tokens[i + 2].text as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        i = i + 3;
+                        continue;
+                    }
+                    if str_eq(tokens[i].text as *const u8, "as") {
                         i = i + 1;
-                        break;
+                        let mut cast_c: [u8; 64] = 0;
+                        let consumed_cast: usize = format_type(tokens, tok_count, i, cast_c as *mut u8, 64);
+                        apply_cast_in_buffer(out_buf, cast_c as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        i = i + consumed_cast;
+                        continue;
                     }
                     let c_tok: *const u8 = tokens[i].text as *const u8;
-                    if str_eq(c_tok, "null") {
+                    if str_eq(c_tok, "null") || str_eq(c_tok, "nil") {
                         str_concat(out_buf, "NULL ", max_len);
                     } else {
                         str_concat(out_buf, c_tok, max_len);
@@ -541,7 +1542,149 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 }
                 str_concat(out_buf, ") {\n", max_len);
                 if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                    if case_arm_depth > 0 {
+                        case_arm_depth = case_arm_depth + 1;
+                    }
                     i = i + 1;
+                }
+                continue;
+            }
+
+            // discern subject { ... } -> switch (subject) { ... }
+            if str_eq(txt, "discern") {
+                str_concat(out_buf, "switch (", max_len);
+                i = i + 1;
+                while i < tok_count && !str_eq(tokens[i].text as *const u8, "{") {
+                    let s_tok: *const u8 = tokens[i].text as *const u8;
+                    if (i + 2 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "::") {
+                        str_concat(out_buf, s_tok, max_len);
+                        str_concat(out_buf, "_", max_len);
+                        str_concat(out_buf, tokens[i + 2].text as *const u8, max_len);
+                        str_concat(out_buf, " ", max_len);
+                        i = i + 3;
+                        continue;
+                    }
+                    str_concat(out_buf, s_tok, max_len);
+                    str_concat(out_buf, " ", max_len);
+                    i = i + 1;
+                }
+                str_concat(out_buf, ") {\n", max_len);
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                    i = i + 1;
+                }
+                discern_depth = discern_depth + 1;
+                continue;
+            }
+
+            // case arm inside discern: case .Variant =>, case 0 =>, case else =>, case _ =>
+            if str_eq(txt, "case") {
+                i = i + 1;
+                if i < tok_count && (str_eq(tokens[i].text as *const u8, "else") || str_eq(tokens[i].text as *const u8, "_")) {
+                    i = i + 1;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "=>") {
+                        i = i + 1;
+                    }
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        str_concat(out_buf, "default: {\n", max_len);
+                        case_arm_depth = 1;
+                        i = i + 1;
+                    } else {
+                        str_concat(out_buf, "default:\n", max_len);
+                    }
+                    continue;
+                }
+                if i < tok_count && str_eq(tokens[i].text as *const u8, ".") {
+                    i = i + 1;
+                    let v_name: *const u8 = tokens[i].text as *const u8;
+                    i = i + 1;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "=>") {
+                        i = i + 1;
+                    }
+                    str_concat(out_buf, "case ", max_len);
+                    str_concat(out_buf, v_name, max_len);
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        str_concat(out_buf, ": {\n", max_len);
+                        case_arm_depth = 1;
+                        i = i + 1;
+                    } else {
+                        str_concat(out_buf, ":\n", max_len);
+                    }
+                    continue;
+                }
+                if (i + 2 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "::") {
+                    let e_name: *const u8 = tokens[i].text as *const u8;
+                    let v_name: *const u8 = tokens[i + 2].text as *const u8;
+                    i = i + 3;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "=>") {
+                        i = i + 1;
+                    }
+                    str_concat(out_buf, "case ", max_len);
+                    str_concat(out_buf, e_name, max_len);
+                    str_concat(out_buf, "_", max_len);
+                    str_concat(out_buf, v_name, max_len);
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        str_concat(out_buf, ": {\n", max_len);
+                        case_arm_depth = 1;
+                        i = i + 1;
+                    } else {
+                        str_concat(out_buf, ":\n", max_len);
+                    }
+                    continue;
+                }
+                let p_name: *const u8 = tokens[i].text as *const u8;
+                i = i + 1;
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "=>") {
+                    i = i + 1;
+                }
+                str_concat(out_buf, "case ", max_len);
+                str_concat(out_buf, p_name, max_len);
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                    str_concat(out_buf, ": {\n", max_len);
+                    case_arm_depth = 1;
+                    i = i + 1;
+                } else {
+                    str_concat(out_buf, ":\n", max_len);
+                }
+                continue;
+            }
+
+            // Pattern arms sem prefixo 'case' (ex: .Variant => { ... } ou 0 => { ... })
+            if discern_depth > 0 && str_eq(txt, ".") && (i + 2 < tok_count) && str_eq(tokens[i + 2].text as *const u8, "=>") {
+                let v_name: *const u8 = tokens[i + 1].text as *const u8;
+                i = i + 3;
+                str_concat(out_buf, "case ", max_len);
+                str_concat(out_buf, v_name, max_len);
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                    str_concat(out_buf, ": {\n", max_len);
+                    case_arm_depth = 1;
+                    i = i + 1;
+                } else {
+                    str_concat(out_buf, ":\n", max_len);
+                }
+                continue;
+            }
+            if discern_depth > 0 && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "=>") {
+                if str_eq(txt, "_") || str_eq(txt, "else") {
+                    i = i + 2;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                        str_concat(out_buf, "default: {\n", max_len);
+                        case_arm_depth = 1;
+                        i = i + 1;
+                    } else {
+                        str_concat(out_buf, "default:\n", max_len);
+                    }
+                    continue;
+                }
+                let val_name: *const u8 = txt;
+                i = i + 2;
+                str_concat(out_buf, "case ", max_len);
+                str_concat(out_buf, val_name, max_len);
+                if i < tok_count && str_eq(tokens[i].text as *const u8, "{") {
+                    str_concat(out_buf, ": {\n", max_len);
+                    case_arm_depth = 1;
+                    i = i + 1;
+                } else {
+                    str_concat(out_buf, ":\n", max_len);
                 }
                 continue;
             }
@@ -557,17 +1700,105 @@ pub fn emit_c_from_tokens(tokens: *const Token, tok_count: usize, out_buf: *mut 
                 continue;
             }
 
+            // Acesso a variante de enum Enum::Variant -> Enum_Variant
+            if (i + 2 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "::") {
+                str_concat(out_buf, tokens[i].text as *const u8, max_len);
+                str_concat(out_buf, "_", max_len);
+                str_concat(out_buf, tokens[i + 2].text as *const u8, max_len);
+                str_concat(out_buf, " ", max_len);
+                i = i + 3;
+                continue;
+            }
+
+            // &mut expr -> &expr
+            if str_eq(txt, "&") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "mut") {
+                str_concat(out_buf, "&", max_len);
+                i = i + 2;
+                continue;
+            }
+
+            // Acessores de bits: .notch[n], .slit[lo..hi], .strand
+            if str_eq(txt, ".") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "notch") {
+                if (i + 4 < tok_count) && str_eq(tokens[i + 2].text as *const u8, "[") && str_eq(tokens[i + 4].text as *const u8, "]") {
+                    let bit_val: *const u8 = tokens[i + 3].text as *const u8;
+                    apply_notch_in_buffer(out_buf, bit_val, max_len);
+                    i = i + 5;
+                    continue;
+                }
+            }
+            if str_eq(txt, ".") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "slit") {
+                if (i + 6 < tok_count) && str_eq(tokens[i + 2].text as *const u8, "[") && str_eq(tokens[i + 4].text as *const u8, "..") && str_eq(tokens[i + 6].text as *const u8, "]") {
+                    let lo_val: *const u8 = tokens[i + 3].text as *const u8;
+                    let hi_val: *const u8 = tokens[i + 5].text as *const u8;
+                    apply_slit_in_buffer(out_buf, lo_val, hi_val, max_len);
+                    i = i + 7;
+                    continue;
+                }
+            }
+            if str_eq(txt, ".") && (i + 1 < tok_count) && str_eq(tokens[i + 1].text as *const u8, "strand") {
+                apply_strand_in_buffer(out_buf, max_len);
+                i = i + 2;
+                continue;
+            }
+
+            if str_eq(txt, "{") {
+                if case_arm_depth > 0 {
+                    case_arm_depth = case_arm_depth + 1;
+                }
+                block_depth = block_depth + 1;
+                str_concat(out_buf, "{\n", max_len);
+                i = i + 1;
+                continue;
+            }
+
+            if str_eq(txt, "}") {
+                if case_arm_depth > 1 {
+                    case_arm_depth = case_arm_depth - 1;
+                    str_concat(out_buf, "}\n", max_len);
+                    i = i + 1;
+                    continue;
+                }
+                if case_arm_depth == 1 {
+                    case_arm_depth = 0;
+                    str_concat(out_buf, "break;\n}\n", max_len);
+                    i = i + 1;
+                    if i < tok_count && str_eq(tokens[i].text as *const u8, ",") {
+                        i = i + 1;
+                    }
+                    continue;
+                }
+                if discern_depth > 0 {
+                    discern_depth = discern_depth - 1;
+                }
+                if defer_count > 0 {
+                    while defer_count > 0 && g_defer_scopes[defer_count - 1] == block_depth {
+                        defer_count = defer_count - 1;
+                        let def_ptr: *const u8 = (g_defer_tokens_text as *const u8) + g_defer_offsets[defer_count];
+                        str_concat(out_buf, def_ptr, max_len);
+                    }
+                }
+                if block_depth > 0 {
+                    block_depth = block_depth - 1;
+                }
+                str_concat(out_buf, "}\n", max_len);
+                i = i + 1;
+                continue;
+            }
+
+            if discern_depth > 0 && case_arm_depth == 0 && str_eq(txt, ",") {
+                i = i + 1;
+                continue;
+            }
+
             // Conversão de tipos primitivos isolados ou símbolos gerais
             let mut c_type: [u8; 32] = 0;
-            if type_to_c(txt, c_type as *mut u8, 32) > 0 && !str_eq(txt, c_type as *const u8) {
+            if type_to_c(txt, c_type as *mut u8, 32) > 0 {
                 str_concat(out_buf, c_type as *const u8, max_len);
             } else {
                 str_concat(out_buf, txt, max_len);
             }
 
             if str_eq(txt, ";") {
-                str_concat(out_buf, "\n", max_len);
-            } else if str_eq(txt, "}") {
                 str_concat(out_buf, "\n", max_len);
             } else {
                 str_concat(out_buf, " ", max_len);

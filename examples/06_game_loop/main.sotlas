@@ -1,0 +1,65 @@
+module examples::game_loop;
+
+import core::math::*;
+import system::time::*;
+
+struct Vector2D {
+    x: i32,
+    y: i32
+}
+
+struct Entity {
+    id: u32,
+    pos: Vector2D,
+    vel: Vector2D
+}
+
+static mut g_entities: [Entity; 4] = 0;
+
+pub fn physics_update(dt_ms: u32) {
+    let mut i: usize = 0;
+    unsafe {
+        while i < 4 {
+            let e: *mut Entity = &g_entities[i] as *mut Entity;
+            (*e).pos.x = (*e).pos.x + ((*e).vel.x * (dt_ms as i32));
+            (*e).pos.y = (*e).pos.y + ((*e).vel.y * (dt_ms as i32));
+            i = i + 1;
+        }
+    }
+}
+
+pub fn main() -> i32 {
+    unsafe {
+        // Initialize 4 test entities
+        g_entities[0].id = 1;
+        g_entities[0].pos.x = 0;
+        g_entities[0].pos.y = 0;
+        g_entities[0].vel.x = 5;
+        g_entities[0].vel.y = 2;
+
+        g_entities[1].id = 2;
+        g_entities[1].pos.x = 100;
+        g_entities[1].pos.y = 200;
+        g_entities[1].vel.x = -1;
+        g_entities[1].vel.y = 3;
+    }
+
+    // Fixed timestep: 16ms per frame (~60 FPS)
+    let fixed_dt: u32 = 16;
+    let mut frame_count: u32 = 0;
+
+    // Simulate 10 frames
+    while frame_count < 10 {
+        physics_update(fixed_dt);
+        frame_count = frame_count + 1;
+    }
+
+    unsafe {
+        // Entity 0: 5 * 16 * 10 = 800
+        probe g_entities[0].pos.x == 800, "Entity 0 position X should match 10-frame delta";
+        // Entity 0: 2 * 16 * 10 = 320
+        probe g_entities[0].pos.y == 320, "Entity 0 position Y should match 10-frame delta";
+    }
+
+    return 0;
+}

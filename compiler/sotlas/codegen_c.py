@@ -1,21 +1,19 @@
-"""Sotlas CodeGen C99 — Emissor freestanding a partir da AST Sotlas."""
+"""Sotlas C11 code emitter — transforms AST into freestanding C11 output."""
 from __future__ import annotations
 from io import StringIO
 from typing import List, Optional
 from .token_types import TK, PRIMITIVE_C_MAP
 from .ast_nodes import *
 
-# Preâmbulo C99 freestanding padrão
+# Standard freestanding C11 prelude
 _PRELUDE = """\
-/* Gerado automaticamente pelo compilador Sotlas Bootstrap v0.1.0 */
-/* NÃO EDITE — arquivo gerado a partir de código-fonte .st          */
+/* sotlas v1.0 — codegen output */
 #include <stdint.h>
 #include <stddef.h>
 """
 
 _BARECORE_PRELUDE = """\
-/* Gerado automaticamente pelo compilador Sotlas Bootstrap v0.1.0 */
-/* Módulo BARECORE — freestanding sem libc                          */
+/* sotlas v1.0 — barecore freestanding, no libc */
 typedef unsigned char      uint8_t;
 typedef unsigned short     uint16_t;
 typedef unsigned int       uint32_t;
@@ -28,9 +26,15 @@ typedef uint64_t           uintptr_t;
 typedef int64_t            intptr_t;
 typedef uint64_t           size_t;
 typedef int64_t            ptrdiff_t;
+#ifndef offsetof
+#define offsetof(type, member) ((size_t)&(((type *)0)->member))
+#endif
+#ifndef _Alignof
+#define _Alignof(type) __alignof__(type)
+#endif
 """
 
-# Mapeamento de operadores binários
+# Binary operator mapping
 _BIN_OP_MAP = {
     TK.EQ: "==", TK.NEQ: "!=", TK.AND: "&&", TK.OR: "||",
     TK.LAND: "&", TK.LOR: "|", TK.XOR: "^",
@@ -65,6 +69,7 @@ class CodegenC:
         self._closures: List[str] = []  # trampolines estáticos de closures
         self._classes_with_vtables: Set[str] = set()
         self._defer_stack: List[DeferNode] = []
+        self._clinch_counter: int = 0
 
     def emit(self) -> str:
         a = self._ast
@@ -217,7 +222,15 @@ class CodegenC:
                 self._emit_stmt(stmt)
 
     def _emit_struct(self, decl: StructDeclNode) -> None:
-        self._w(f"struct {decl.name} {{\n")
+        pack_attrs = ""
+        for d in decl.directives:
+            d_name = d.name.lstrip("@")
+            if d_name == "packed":
+                pack_attrs += " __attribute__((packed))"
+            elif d_name == "aligned" and d.args:
+                al_val = d.args[0][1] if d.args[0][1] is not None else d.args[0][0]
+                pack_attrs += f" __attribute__((aligned({al_val})))"
+        self._w(f"struct{pack_attrs} {decl.name} {{\n")
         self._indent_inc()
         for m in decl.members:
             if isinstance(m, FieldDeclNode):
@@ -346,6 +359,24 @@ class CodegenC:
         attrs = ""
         if decl.is_irqfree:
             attrs += " __attribute__((no_caller_saved_registers))"
+        for d in decl.directives:
+            d_name = d.name.lstrip("@")
+            if d_name == "naked":
+                attrs += " __attribute__((naked))"
+            elif d_name == "interrupt":
+                attrs += " __attribute__((interrupt))"
+            elif d_name == "noinline":
+                attrs += " __attribute__((noinline))"
+            elif d_name == "noreturn":
+                attrs += " __attribute__((noreturn))"
+            elif d_name == "section" and d.args:
+                sec_val = d.args[0][1] if d.args[0][1] is not None else d.args[0][0]
+                if not sec_val.startswith('"'):
+                    sec_val = f'"{sec_val}"'
+                attrs += f" __attribute__((section({sec_val})))"
+            elif d_name == "aligned" and d.args:
+                al_val = d.args[0][1] if d.args[0][1] is not None else d.args[0][0]
+                attrs += f" __attribute__((aligned({al_val})))"
         ret = self._emit_type(decl.ret) if decl.ret else "void"
         params = ", ".join(
             f"{self._emit_type(p.type_ann)} {p.name}" for p in decl.params
@@ -506,21 +537,23 @@ class CodegenC:
         self._line(f"{prefix}{c_type}{attrs} {stmt.name} = {val};")
 
     def _emit_clinch(self, stmt: ClinchNode) -> None:
-        """clinch { body } revert { cleanup } → cli/sti com goto de limpeza."""
+        """clinch { body } revert { cleanup } com salvamento e restauração do vetor de interrupção."""
+        cid = self._clinch_counter
+        self._clinch_counter += 1
         self._line("{")
         self._indent_inc()
-        self._line("__asm__ volatile(\"cli\" ::: \"memory\"); /* clinch: início de seção crítica */")
+        self._line(f"uint64_t _sotlas_clinch_flags_{cid} = __irq_save_disable(); /* clinch: cli + salvamento de flags e blindagem de IRQ */")
         for st in stmt.body:
             self._emit_stmt(st)
         if stmt.revert:
-            self._line("__asm__ volatile(\"sti\" ::: \"memory\"); /* clinch: fim normal */")
-            self._line("goto _sotlas_clinch_end;")
+            self._line(f"__irq_restore(_sotlas_clinch_flags_{cid}); /* clinch: sti + restauração de flags */")
+            self._line(f"goto _sotlas_clinch_end_{cid};")
             self._line("/* revert: restauração de contexto */")
             for st in stmt.revert:
                 self._emit_stmt(st)
-            self._line("_sotlas_clinch_end:;")
+            self._line(f"_sotlas_clinch_end_{cid}:;")
         else:
-            self._line("__asm__ volatile(\"sti\" ::: \"memory\"); /* clinch: fim */")
+            self._line(f"__irq_restore(_sotlas_clinch_flags_{cid}); /* clinch: sti + restauração de flags */")
         self._indent_dec()
         self._line("}")
 
@@ -716,6 +749,12 @@ class CodegenC:
             return f"(&{closure_name})"
         if isinstance(expr, ArgNode):
             return self._emit_expr(expr.value)
+        if isinstance(expr, (SpanOfNode, StrideOfNode)):
+            return f"sizeof({self._emit_type(expr.target_type)})"
+        if isinstance(expr, AlignOfNode):
+            return f"_Alignof({self._emit_type(expr.target_type)})"
+        if isinstance(expr, FieldOffsetNode):
+            return f"offsetof({expr.struct_name}, {expr.field_name})"
         return "/* unknown_expr */"
 
     def _emit_literal(self, lit: LiteralNode) -> str:

@@ -1,0 +1,54 @@
+module core::fathom;
+
+// ============================================================================
+// Fathom — Sondagem delimitada sobre faixa contígua de memória
+// ============================================================================
+//
+// Oferece uma visão segura, contígua e não-possuidora sobre buffers de memória,
+// com checagem de limites (bounds checking).
+pub struct Fathom forge<T> {
+    pub ptr: *mut T;
+    pub length: usize;
+
+    pub fn from_raw(p: *mut T, len: usize) -> Fathom forge<T> {
+        return Fathom {
+            ptr: p,
+            length: len,
+        };
+    }
+
+    pub fn is_empty(self) -> bool {
+        return self.length == 0;
+    }
+
+    pub fn count(self) -> usize {
+        return self.length;
+    }
+
+    @system
+    pub fn at(self, index: usize) -> *mut T {
+        if index >= self.length {
+            unsafe {
+                __builtin_trap();
+            }
+        }
+        unsafe {
+            return (self.ptr + index) as *mut T;
+        }
+    }
+
+    @system
+    pub fn sub(self, offset: usize, count: usize) -> Fathom forge<T> {
+        if offset + count > self.length {
+            unsafe {
+                __builtin_trap();
+            }
+        }
+        unsafe {
+            return Fathom {
+                ptr: (self.ptr + offset) as *mut T,
+                length: count,
+            };
+        }
+    }
+}

@@ -1,0 +1,92 @@
+module test::native::discern_probe;
+
+enum TaskState {
+    Idle,
+    Running,
+    Suspended,
+    Done
+}
+
+pub fn state_to_code(s: TaskState) -> i32 {
+    let mut code: i32 = -1;
+    discern s {
+        case .Idle => {
+            code = 100;
+        }
+        case .Running => {
+            code = 200;
+        }
+        case .Suspended => {
+            code = 300;
+        }
+        case .Done => {
+            code = 400;
+        }
+        case else => {
+            code = 999;
+        }
+    }
+    return code;
+}
+
+pub fn http_status_category(status: u32) -> u32 {
+    let mut cat: u32 = 0;
+    discern status {
+        case 200 => {
+            cat = 1; // OK
+        }
+        case 201 => {
+            cat = 1; // Created
+        }
+        case 404 => {
+            cat = 2; // Client error
+        }
+        case 500 => {
+            cat = 3; // Server error
+        }
+        case else => {
+            cat = 9; // Other
+        }
+    }
+    return cat;
+}
+
+pub fn test_task_state_matching() -> bool {
+    let s1: TaskState = TaskState::Idle;
+    let s2: TaskState = TaskState::Running;
+    let s3: TaskState = TaskState::Suspended;
+    let s4: TaskState = TaskState::Done;
+
+    probe state_to_code(s1) == 100, "Idle state must match 100";
+    probe state_to_code(s2) == 200, "Running state must match 200";
+    probe state_to_code(s3) == 300, "Suspended state must match 300";
+    probe state_to_code(s4) == 400, "Done state must match 400";
+
+    return true;
+}
+
+pub fn test_numeric_discern() -> bool {
+    probe http_status_category(200) == 1, "status 200 is category 1";
+    probe http_status_category(201) == 1, "status 201 is category 1";
+    probe http_status_category(404) == 2, "status 404 is category 2";
+    probe http_status_category(500) == 3, "status 500 is category 3";
+    probe http_status_category(418) == 9, "status 418 is category 9";
+
+    return true;
+}
+
+pub fn test_pulse_barrier() -> bool {
+    let mut val: u32 = 12345;
+    pulse;
+    val = val + 1;
+    pulse;
+    probe val == 12346, "value after pulses must equal 12346";
+    return true;
+}
+
+pub fn main() -> i32 {
+    probe test_task_state_matching(), "task state matching passed";
+    probe test_numeric_discern(), "numeric discern passed";
+    probe test_pulse_barrier(), "pulse barrier passed";
+    return 0;
+}

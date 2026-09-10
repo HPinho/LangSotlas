@@ -1,0 +1,41 @@
+module test::defer_native;
+
+static mut g_order: u32 = 0;
+static mut g_cleanup: u32 = 0;
+
+pub fn execute_lifo() {
+    unsafe {
+        g_order = 0;
+        defer g_order = g_order * 10 + 1;
+        defer g_order = g_order * 10 + 2;
+        defer g_order = g_order * 10 + 3;
+    }
+}
+
+pub fn calculate(n: i32) -> i32 {
+    unsafe {
+        defer g_cleanup = 42;
+    }
+    if n > 0 {
+        return n * 2;
+    }
+    return 0;
+}
+
+pub fn main() -> i32 {
+    execute_lifo();
+    unsafe {
+        if g_order != 321 {
+            return 1;
+        }
+    }
+
+    let res: i32 = calculate(5);
+    unsafe {
+        if res != 10 || g_cleanup != 42 {
+            return 2;
+        }
+    }
+
+    return 0;
+}

@@ -1,0 +1,37 @@
+module test::math_native;
+
+import core::math::*;
+
+pub fn main() -> i32 {
+    if abs(-42) != 42 {
+        return 1;
+    }
+    if abs(100) != 100 {
+        return 2;
+    }
+    if min(10, 20) != 10 {
+        return 3;
+    }
+    if max(10, 20) != 20 {
+        return 4;
+    }
+    if clamp(50, 0, 100) != 50 {
+        return 5;
+    }
+    if clamp(-5, 0, 100) != 0 {
+        return 6;
+    }
+    if clamp(150, 0, 100) != 100 {
+        return 7;
+    }
+    if pow(2, 10) != 1024 {
+        return 8;
+    }
+    if sqrt(144) != 12 {
+        return 9;
+    }
+    if sqrt(100) != 10 {
+        return 10;
+    }
+    return 0;
+}

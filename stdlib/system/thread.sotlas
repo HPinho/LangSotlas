@@ -1,0 +1,203 @@
+module system::thread;
+
+// ============================================================================
+// system::thread — Concurrency and Synchronization Primitives
+// ============================================================================
+//
+// Developer note:
+// Concurrency is remarkably easy if you don't care about correctness.
+// If you do care, welcome to memory fences, atomic compare-exchange loops,
+// and praying the hardware cache coherency protocol respects your life choices.
+// ============================================================================
+
+// Adaptive Mutex with spin-phase and CPU pause
+@repr(C)
+pub struct Mutex {
+    pub locked: u32;
+    pub spin_limit: u32;
+}
+
+pub fn mutex_new() -> Mutex {
+    let mut m: Mutex = 0;
+    m.locked = 0;
+    m.spin_limit = 100;
+    return m;
+}
+
+@system
+pub fn mutex_lock(m: *mut Mutex) {
+    if m == null {
+        return;
+    }
+    unsafe {
+        let addr: u64 = &(*m).locked as *const u32 as u64;
+        let mut spins: u32 = 0;
+        while __atomic_exchange_u32(addr, 1) != 0 {
+            __cpu_pause();
+            spins = spins + 1;
+            if spins >= (*m).spin_limit {
+                __dma_fence();
+                spins = 0;
+            }
+        }
+    }
+}
+
+@system
+pub fn mutex_try_lock(m: *mut Mutex) -> bool {
+    if m == null {
+        return false;
+    }
+    unsafe {
+        let addr: u64 = &(*m).locked as *const u32 as u64;
+        return __atomic_exchange_u32(addr, 1) == 0;
+    }
+}
+
+@system
+pub fn mutex_unlock(m: *mut Mutex) {
+    if m == null {
+        return;
+    }
+    unsafe {
+        let addr: u64 = &(*m).locked as *const u32 as u64;
+        __sfence();
+        __atomic_store_u32(addr, 0);
+    }
+}
+
+// Bounded Multi-Producer Single-Consumer (MPSC) Ring Channel.
+// Note to future maintainers: Do NOT remove the __sfence() below unless you
+// genuinely enjoy debugging phantom ghost values appearing in FIFO order at 3am.
+@repr(C)
+pub struct ChannelU64 {
+    pub buffer: *mut u64;
+    pub capacity: usize;
+    pub head: usize;
+    pub tail: usize;
+    pub count: usize;
+    pub lock_state: u32;
+}
+
+pub fn channel_new(backing_buf: *mut u64, cap: usize) -> ChannelU64 {
+    let mut ch: ChannelU64 = 0;
+    ch.buffer = backing_buf;
+    ch.capacity = cap;
+    ch.head = 0;
+    ch.tail = 0;
+    ch.count = 0;
+    ch.lock_state = 0;
+    return ch;
+}
+
+@system
+pub fn channel_is_empty(ch: *const ChannelU64) -> bool {
+    if ch == null {
+        return true;
+    }
+    unsafe {
+        return (*ch).count == 0;
+    }
+}
+
+@system
+pub fn channel_is_full(ch: *const ChannelU64) -> bool {
+    if ch == null {
+        return false;
+    }
+    unsafe {
+        return (*ch).count >= (*ch).capacity;
+    }
+}
+
+@system
+pub fn channel_send(ch: *mut ChannelU64, item: u64) -> bool {
+    if ch == null {
+        return false;
+    }
+    unsafe {
+        let addr: u64 = &(*ch).lock_state as *const u32 as u64;
+        while __atomic_exchange_u32(addr, 1) != 0 {
+            __cpu_pause();
+        }
+
+        let mut success: bool = false;
+        if (*ch).buffer != null && (*ch).count < (*ch).capacity {
+            let slot: *mut u64 = (*ch).buffer + (*ch).tail;
+            *slot = item;
+            (*ch).tail = ((*ch).tail + 1) % (*ch).capacity;
+            (*ch).count = (*ch).count + 1;
+            success = true;
+        }
+
+        __sfence();
+        __atomic_store_u32(addr, 0);
+        return success;
+    }
+}
+
+@system
+pub fn channel_recv(ch: *mut ChannelU64, out_val: *mut u64) -> bool {
+    if ch == null || out_val == null {
+        return false;
+    }
+    unsafe {
+        let addr: u64 = &(*ch).lock_state as *const u32 as u64;
+        while __atomic_exchange_u32(addr, 1) != 0 {
+            __cpu_pause();
+        }
+
+        let mut success: bool = false;
+        if (*ch).buffer != null && (*ch).count > 0 {
+            let slot: *const u64 = (*ch).buffer + (*ch).head;
+            *out_val = *slot;
+            (*ch).head = ((*ch).head + 1) % (*ch).capacity;
+            (*ch).count = (*ch).count - 1;
+            success = true;
+        }
+
+        __sfence();
+        __atomic_store_u32(addr, 0);
+        return success;
+    }
+}
+
+// Lightweight condition variable counter
+@repr(C)
+pub struct CondVar {
+    pub sequence: u32;
+}
+
+pub fn condvar_new() -> CondVar {
+    let mut cv: CondVar = 0;
+    cv.sequence = 0;
+    return cv;
+}
+
+@system
+pub fn condvar_notify_one(cv: *mut CondVar) {
+    if cv == null {
+        return;
+    }
+    unsafe {
+        let addr: u64 = &(*cv).sequence as *const u32 as u64;
+        __atomic_exchange_u32(addr, (*cv).sequence + 1);
+        __dma_fence();
+    }
+}
+
+@system
+pub fn condvar_wait_change(cv: *const CondVar, last_seq: u32) -> u32 {
+    if cv == null {
+        return 0;
+    }
+    unsafe {
+        let addr: u64 = &(*cv).sequence as *const u32 as u64;
+        let mut cur: u32 = __atomic_load_u32(addr);
+        while cur == last_seq {
+            __cpu_pause();
+            cur = __atomic_load_u32(addr);
+        }
+        return cur;
+    }
+}

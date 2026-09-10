@@ -1,0 +1,47 @@
+module system::ticker;
+
+// ============================================================================
+// ClockPulse & Ticker — Monotonic Hardware Cycles & Precision Timestamps
+// ============================================================================
+//
+// Direct CPU machine cycle measurement for kernel schedulers, latency probes,
+// and barecore timers without relying on OS standard libraries.
+
+pub struct ClockPulse {
+    pub base_tick: u64;
+
+    @system
+    pub fn now() -> ClockPulse {
+        return ClockPulse {
+            base_tick: monotonic_tick(),
+        };
+    }
+
+    @system
+    pub fn elapsed(self) -> u64 {
+        let current: u64 = monotonic_tick();
+        if current >= self.base_tick {
+            return current - self.base_tick;
+        }
+        return 0;
+    }
+}
+
+// Direct hardware cycle counter read (RDTSC on x86-64)
+@system
+pub fn monotonic_tick() -> u64 {
+    let mut lo: u32 = 0;
+    let mut hi: u32 = 0;
+    unsafe {
+        __asm__ volatile ("rdtsc" : "=a"(lo), "=d"(hi));
+        let cycle: u64 = ((hi as u64) << 32) | (lo as u64);
+        return cycle;
+    }
+}
+
+pub fn tick_diff(before: u64, after: u64) -> u64 {
+    if after >= before {
+        return after - before;
+    }
+    return 0;
+}

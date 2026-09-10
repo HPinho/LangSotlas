@@ -213,7 +213,7 @@ class _StrictSafetyChecker:
                 function.body,
                 {name: typ for name, typ in function.params},
                 0,
-                _attr(function, "@system"),
+                _attr(function, "@system") or _attr(function, "@naked") or _attr(function, "@interrupt"),
             )
 
     def _infer(self, expr, scope, depth: int, system_context: bool) -> _ExprInfo:

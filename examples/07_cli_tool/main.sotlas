@@ -1,0 +1,75 @@
+module examples::cli_tool;
+
+import core::string::*;
+
+pub enum Command {
+    None = 0,
+    Build = 1,
+    Test = 2,
+    Help = 3
+}
+
+pub struct CliConfig {
+    pub cmd: Command,
+    pub verbose: bool,
+    pub target_file: StringSlice
+}
+
+pub fn parse_command(arg: StringSlice) -> Command {
+    let s_build: StringSlice = string_from_raw("build" as *const u8, 5);
+    if string_equals(arg, s_build) {
+        return Command::Build;
+    }
+    let s_test: StringSlice = string_from_raw("test" as *const u8, 4);
+    if string_equals(arg, s_test) {
+        return Command::Test;
+    }
+    let s_help: StringSlice = string_from_raw("help" as *const u8, 4);
+    let s_help_long: StringSlice = string_from_raw("--help" as *const u8, 6);
+    let s_help_short: StringSlice = string_from_raw("-h" as *const u8, 2);
+    if string_equals(arg, s_help) || string_equals(arg, s_help_long) || string_equals(arg, s_help_short) {
+        return Command::Help;
+    }
+    return Command::None;
+}
+
+pub fn print_help() {
+    let usage: *const u8 = "sotlas-cli: [build|test|help] [--verbose]" as *const u8;
+    probe usage != nil, "usage banner valid";
+}
+
+pub fn main() -> i32 {
+    let mut config: CliConfig = 0;
+    config.cmd = Command::None;
+    config.verbose = false;
+
+    // Simulate arguments: "build" "--verbose"
+    let arg1: StringSlice = string_from_raw("build" as *const u8, 5);
+    let arg2: StringSlice = string_from_raw("--verbose" as *const u8, 9);
+    let s_v: StringSlice = string_from_raw("-v" as *const u8, 2);
+
+    config.cmd = parse_command(arg1);
+    if string_equals(arg2, arg2) || string_equals(arg2, s_v) {
+        config.verbose = true;
+    }
+
+    probe config.cmd == Command::Build, "Command should parse as Build";
+    probe config.verbose == true, "Verbose flag should be set to true";
+
+    // Simulate dispatch
+    discern config.cmd {
+        case Command::Build => {
+            return 0; // Build succeeded
+        }
+        case Command::Test => {
+            return 10;
+        }
+        case Command::Help => {
+            print_help();
+            return 0;
+        }
+        case _ => {
+            return 1;
+        }
+    }
+}

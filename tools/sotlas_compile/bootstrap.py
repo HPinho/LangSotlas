@@ -43,15 +43,28 @@ class Token:
 
 KEYWORDS = {"module", "import", "pub", "struct", "class", "enum", "fn", "let", "mut",
             "const", "static", "return", "break", "continue", "if", "else", "while", "for", "in",
-            "unsafe", "true", "false", "as", "null", "defer", "loop"}
+            "unsafe", "true", "false", "as", "null", "defer", "loop", "register", "sole", "handover"}
 MULTI = ("::", "->", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "&=", "|=", "^=", "<<=", ">>=", "&&", "||", "<<", ">>", "..")
-SINGLE = set(";,:{}()[]=+-*/%!<>&|^~.")
+SINGLE = set(";,:{}()[]=+-*/%!<>&|^~.?")
 PRIMITIVES = {"void", "bool", "u8", "u16", "u32", "u64", "usize",
               "i8", "i16", "i32", "i64", "isize", "f32", "f64", "str"}
 C_TYPES = {"void": "void", "bool": "_Bool", "u8": "uint8_t", "u16": "uint16_t",
            "u32": "uint32_t", "u64": "uint64_t", "usize": "size_t",
            "i8": "int8_t", "i16": "int16_t", "i32": "int32_t", "i64": "int64_t",
            "isize": "intptr_t", "f32": "float", "f64": "double", "str": "char"}
+
+
+def get_c_type(name: str) -> str:
+    if name in C_TYPES:
+        return C_TYPES[name]
+    if (name.startswith("u") or name.startswith("i")) and name[1:].isdigit():
+        width = int(name[1:])
+        prefix = "uint" if name.startswith("u") else "int"
+        if width <= 8: return f"{prefix}8_t"
+        if width <= 16: return f"{prefix}16_t"
+        if width <= 32: return f"{prefix}32_t"
+        return f"{prefix}64_t"
+    return name
 
 # Literais com sufixo mantêm a intenção de tipo na AST, mas o backend C emite
 # um cast explícito, pois `1u32` não é sintaxe válida em C. O formato segue a
@@ -187,7 +200,7 @@ class Type:
             return self._fn_ptr_c("")
         if self.is_array and self.elem_type:
             return self.elem_type.base_c()
-        base = C_TYPES.get(self.name, self.name)
+        base = get_c_type(self.name)
         if self.pointer:
             prefix = "" if self.mutable else "const "
             return f"{prefix}{base} *"
@@ -212,7 +225,7 @@ class Type:
             return self._fn_ptr_c("")
         if self.is_array:
             return f"{self.base_c()} *"
-        base = C_TYPES.get(self.name, self.name)
+        base = get_c_type(self.name)
         if self.pointer:
             prefix = "" if self.mutable else "const "
             return f"{prefix}{base} *"
@@ -279,6 +292,9 @@ class IfExpr(Expr):
     condition: Expr
     then_expr: Expr
     else_expr: Expr
+@dataclass
+class TryExpr(Expr):
+    expr: Expr
 
 @dataclass
 class Stmt: token: Token
@@ -327,7 +343,11 @@ class Asm(Stmt):
     clobbers: list[str] = field(default_factory=list)
 
 @dataclass
-class FieldDef: name: str; type: Type
+class FieldDef:
+    name: str
+    type: Type
+    bit_width: int | None = None
+
 @dataclass
 class Struct:
     name: str
@@ -335,6 +355,9 @@ class Struct:
     public: bool = False
     attributes: list[str] = field(default_factory=list)
     methods: list[Function] = field(default_factory=list)
+    is_register: bool = False
+    backing_type: Type | None = None
+    is_sole: bool = False
 
 @dataclass
 class Class:
@@ -537,6 +560,11 @@ class Parser:
                 attributes.append(self.accept("ATTR").text)
 
             public = bool(self.accept("pub"))
+            is_sole = bool(self.accept("sole"))
+            if not public and not is_sole:
+                public = bool(self.accept("pub"))
+            if not is_sole and public:
+                is_sole = bool(self.accept("sole"))
 
             if self.accept("struct"):
                 name = self.ident()
@@ -559,11 +587,49 @@ class Parser:
                     if self.accept("fn"):
                         methods.append(self._parse_method(name, member_pub, member_attrs))
                     else:
-                        fields.append(FieldDef(self.ident(), self._field_type()))
+                        fname = self.ident()
+                        ftype = self._field_type()
+                        bw = None
+                        if self.accept(":"):
+                            bw = integer_literal_value(self.expect("NUMBER").text)
+                        fields.append(FieldDef(fname, ftype, bit_width=bw))
                         self.expect(";")
-                module.structs.append(Struct(name, fields, public, attributes, methods=methods))
+                module.structs.append(Struct(name, fields, public, attributes, methods=methods, is_sole=is_sole))
                 for m in methods:
                     module.functions.append(m)
+                continue
+
+            if self.accept("register"):
+                name = self.ident()
+                backing = Type("u32")
+                if self.accept(":"):
+                    backing = self.type()
+                self.expect("{")
+                fields = []
+                while not self.accept("}"):
+                    fname = self.ident()
+                    self.expect(":")
+                    ftype = self.type()
+                    bw = None
+                    if self.accept(":"):
+                        bw = integer_literal_value(self.expect("NUMBER").text)
+                    elif self.accept("["):
+                        lo = integer_literal_value(self.expect("NUMBER").text)
+                        if self.accept(".."):
+                            hi = integer_literal_value(self.expect("NUMBER").text)
+                            bw = (hi - lo) + 1
+                        else:
+                            bw = 1
+                        self.expect("]")
+                    elif (ftype.name.startswith("u") or ftype.name.startswith("i")) and ftype.name[1:].isdigit():
+                        w = int(ftype.name[1:])
+                        if w < 64:
+                            bw = w
+                    fields.append(FieldDef(fname, ftype, bit_width=bw))
+                    if not self.accept(","):
+                        if self.current.kind != "}":
+                            self.accept(";")
+                module.structs.append(Struct(name, fields, public, attributes, is_register=True, backing_type=backing))
                 continue
 
             if self.accept("class"):
@@ -899,6 +965,8 @@ class Parser:
             elif self.accept("as"):
                 target_type = self.type()
                 expr = Cast(expr.token, expr, target_type)
+            elif self.accept("?"):
+                expr = TryExpr(expr.token, expr)
             else:
                 break
         return expr
@@ -1149,6 +1217,12 @@ def check(module: Module, imported_fns: dict[str, Function] | None = None,
                 f"método não declarado: {target_t.name}.{expr.method}",
                 expr.token.line, expr.token.column, filename, source,
             )
+        if isinstance(expr, TryExpr):
+            inner_t = expr_type(expr.expr, scope, in_unsafe, is_system_fn)
+            if inner_t.name.startswith("Result"):
+                val_t_name = inner_t.name[6:].lower()
+                return Type(val_t_name)
+            return Type("u32")
         if isinstance(expr, Cast):
             expr_type(expr.expr, scope, in_unsafe, is_system_fn)
             return expr.target_type
@@ -1282,6 +1356,9 @@ def _emit_expr(expr: Expr, mod_prefix: str = "") -> str:
         then_s = _emit_expr(expr.then_expr, mod_prefix)
         else_s = _emit_expr(expr.else_expr, mod_prefix)
         return f"(({cond_s}) ? ({then_s}) : ({else_s}))"
+    if isinstance(expr, TryExpr):
+        inner_str = _emit_expr(expr.expr, mod_prefix)
+        return f"({{ __auto_type _res = ({inner_str}); if (_res.status != 0) return _res; _res.value; }})"
     raise AssertionError(type(expr))
 
 
@@ -1574,6 +1651,43 @@ static inline const uint8_t *baken_get_motion_icon_alpha(uint32_t motion_id, uin
 """
 
 
+def _c_func_attributes(attributes: list[str]) -> str:
+    attrs = []
+    for a in attributes:
+        if a == "@naked":
+            attrs.append("__attribute__((naked))")
+        elif a == "@interrupt":
+            attrs.append("__attribute__((interrupt))")
+        elif a == "@noinline":
+            attrs.append("__attribute__((noinline))")
+        elif a == "@noreturn":
+            attrs.append("__attribute__((noreturn))")
+        elif a.startswith("@section(") and a.endswith(")"):
+            inner = a[9:-1].strip()
+            if not inner.startswith('"'):
+                inner = f'"{inner}"'
+            attrs.append(f"__attribute__((section({inner})))")
+        elif a.startswith("@aligned(") and a.endswith(")"):
+            inner = a[9:-1].strip()
+            attrs.append(f"__attribute__((aligned({inner})))")
+    if attrs:
+        return " ".join(attrs) + " "
+    return ""
+
+
+def _c_struct_attributes(attributes: list[str]) -> str:
+    attrs = []
+    for a in attributes:
+        if a == "@packed":
+            attrs.append("__attribute__((packed))")
+        elif a.startswith("@aligned(") and a.endswith(")"):
+            inner = a[9:-1].strip()
+            attrs.append(f"__attribute__((aligned({inner})))")
+    if attrs:
+        return " " + " ".join(attrs)
+    return ""
+
+
 def emit_c(module: Module, mangle: bool = False, include_preamble: bool = True,
            include_import_headers: bool = False) -> str:
     prefix = f"{_c_ident(module.name)}__" if mangle else ""
@@ -1601,17 +1715,32 @@ def emit_c(module: Module, mangle: bool = False, include_preamble: bool = True,
 
     # Forward typedefs das structs para suportar ponteiros de função autorreferenciais e vtables
     for struct in module.structs:
-        lines.append(f"typedef struct {struct.name} {struct.name};")
+        if getattr(struct, "is_register", False):
+            lines.append(f"typedef union {struct.name} {struct.name};")
+        else:
+            lines.append(f"typedef struct {struct.name} {struct.name};")
     if module.structs:
         lines.append("")
 
-    # Structs
+    # Structs & Registers
     for struct in module.structs:
-        pack_attr = " __attribute__((packed))" if "@packed" in struct.attributes else ""
-        lines.append(f"typedef struct{pack_attr} {struct.name} {{")
-        for fld in struct.fields:
-            lines.append(f"    {fld.type.c_decl(fld.name)};")
-        lines.append(f"}} {struct.name};\n")
+        if getattr(struct, "is_register", False):
+            backing_c = struct.backing_type.c() if struct.backing_type else "uint32_t"
+            lines.append(f"typedef union {struct.name} {{")
+            lines.append(f"    {backing_c} raw;")
+            lines.append(f"    struct __attribute__((packed)) {{")
+            for fld in struct.fields:
+                bw = f" : {fld.bit_width}" if fld.bit_width else ""
+                lines.append(f"        {backing_c} {fld.name}{bw};")
+            lines.append(f"    }};")
+            lines.append(f"}} {struct.name};\n")
+        else:
+            pack_attr = _c_struct_attributes(struct.attributes)
+            lines.append(f"typedef struct{pack_attr} {struct.name} {{")
+            for fld in struct.fields:
+                bw = f" : {fld.bit_width}" if getattr(fld, "bit_width", None) else ""
+                lines.append(f"    {fld.type.c_decl(fld.name)}{bw};")
+            lines.append(f"}} {struct.name};\n")
 
     # Globals / Consts
     for g in module.globals:
@@ -1641,6 +1770,12 @@ def emit_c(module: Module, mangle: bool = False, include_preamble: bool = True,
     ) -> list[str]:
         pad = "    " * depth; out: list[str] = []
         defer_scopes.append([])
+        deinit_methods: dict[str, bool] = {}
+        for fn in module.functions:
+            if fn.name.endswith("_deinit") and len(fn.params) >= 1 and fn.params[0][0] == "self":
+                sname = fn.name.rsplit("_deinit", 1)[0]
+                deinit_methods[sname] = fn.params[0][1].pointer
+
         for item in items:
             if isinstance(item, Let):
                 if item.type is not None:
@@ -1653,6 +1788,11 @@ def emit_c(module: Module, mangle: bool = False, include_preamble: bool = True,
                         out.append(f"{pad}{prefix_spec}{decl} = {_emit_expr(item.value, prefix)};")
                     else:
                         out.append(f"{pad}{typ.c_decl(item.name)} = {_emit_expr(item.value, prefix)};")
+                    if typ.name in deinit_methods and not typ.pointer:
+                        takes_ptr = deinit_methods[typ.name]
+                        arg_node = Unary(item.token, "&", Name(item.token, item.name)) if takes_ptr else Name(item.token, item.name)
+                        call_expr = Call(item.token, f"{typ.name}_deinit", [arg_node])
+                        defer_scopes[-1].append(Defer(item.token, value=call_expr))
                 else:
                     if isinstance(item.value, ArrayLit) and not item.value.is_repeat:
                         first_e = item.value.elements[0] if item.value.elements else None
@@ -1679,7 +1819,10 @@ def emit_c(module: Module, mangle: bool = False, include_preamble: bool = True,
                         c_ret_type = ret_type.c() if ret_type else "int64_t"
                         out.append(f"{pad}{c_ret_type} _st_ret = {val_str};")
                         for d in all_defers:
-                            out.append(_emit_defer_action(d, pad))
+                            if d.body is not None:
+                                out.extend(emit_statements(d.body, depth, defer_scopes, loop_scope_depth, ret_type))
+                            else:
+                                out.append(_emit_defer_action(d, pad))
                         out.append(f"{pad}return _st_ret;")
                     else:
                         out.append(f"{pad}return {val_str};")
@@ -1756,7 +1899,8 @@ def emit_c(module: Module, mangle: bool = False, include_preamble: bool = True,
         fname = function.name if (is_export or not mangle) else f"{prefix}{function.name}"
         parameters = ", ".join(f"{typ.c_decl(name)}" for name, typ in function.params) or "void"
         inline_attr = "static inline " if "@inline" in function.attributes and not is_export else ""
-        lines.append(f"{inline_attr}{function.result.c()} {fname}({parameters});")
+        extra_attrs = _c_func_attributes(function.attributes)
+        lines.append(f"{inline_attr}{extra_attrs}{function.result.c()} {fname}({parameters});")
     if module.functions: lines.append("")
 
     for function in module.functions:
@@ -1764,7 +1908,8 @@ def emit_c(module: Module, mangle: bool = False, include_preamble: bool = True,
         fname = function.name if (is_export or not mangle) else f"{prefix}{function.name}"
         parameters = ", ".join(f"{typ.c_decl(name)}" for name, typ in function.params) or "void"
         inline_attr = "static inline " if "@inline" in function.attributes and not is_export else ""
-        lines.append(f"{inline_attr}{function.result.c()} {fname}({parameters}) {{")
+        extra_attrs = _c_func_attributes(function.attributes)
+        lines.append(f"{inline_attr}{extra_attrs}{function.result.c()} {fname}({parameters}) {{")
         lines.extend(emit_statements(function.body, 1, defer_scopes=[], loop_scope_depth=None, ret_type=function.result))
         lines.append("}\n")
     return "\n".join(lines)
@@ -1812,23 +1957,38 @@ def emit_header(module: Module) -> str:
 
     for struct in module.structs:
         if struct.public:
-            lines.append(f"typedef struct {struct.name} {struct.name};")
+            if getattr(struct, "is_register", False):
+                lines.append(f"typedef union {struct.name} {struct.name};")
+            else:
+                lines.append(f"typedef struct {struct.name} {struct.name};")
     if any(struct.public for struct in module.structs):
         lines.append("")
 
     for struct in module.structs:
         if not struct.public:
             continue
-        pack_attr = " __attribute__((packed))" if "@packed" in struct.attributes else ""
-        lines.append(f"typedef struct{pack_attr} {struct.name} {{")
-        lines.extend(f"    {field.type.c_decl(field.name)};" for field in struct.fields)
-        lines.append(f"}} {struct.name};")
+        if getattr(struct, "is_register", False):
+            backing_c = struct.backing_type.c() if struct.backing_type else "uint32_t"
+            lines.append(f"typedef union {struct.name} {{")
+            lines.append(f"    {backing_c} raw;")
+            lines.append(f"    struct __attribute__((packed)) {{")
+            for fld in struct.fields:
+                bw = f" : {fld.bit_width}" if fld.bit_width else ""
+                lines.append(f"        {backing_c} {fld.name}{bw};")
+            lines.append(f"    }};")
+            lines.append(f"}} {struct.name};")
+        else:
+            pack_attr = _c_struct_attributes(struct.attributes)
+            lines.append(f"typedef struct{pack_attr} {struct.name} {{")
+            lines.extend(f"    {field.type.c_decl(field.name)}{(' : ' + str(field.bit_width)) if getattr(field, 'bit_width', None) else ''};" for field in struct.fields)
+            lines.append(f"}} {struct.name};")
 
     for function in module.functions:
         if not function.public and "@export" not in function.attributes:
             continue
         parameters = ", ".join(typ.c_decl(name) for name, typ in function.params) or "void"
-        lines.append(f"{function.result.c()} {function.name}({parameters});")
+        extra_attrs = _c_func_attributes(function.attributes)
+        lines.append(f"{extra_attrs}{function.result.c()} {function.name}({parameters});")
     lines.extend(("", f"#endif /* {guard} */", ""))
     return "\n".join(lines)
 

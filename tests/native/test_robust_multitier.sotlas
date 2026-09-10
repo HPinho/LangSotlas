@@ -1,0 +1,69 @@
+module test::robust_multitier;
+
+import foundation::alloc::*;
+import foundation::vec::*;
+import foundation::string_buf::*;
+import foundation::file::*;
+
+// Fixed static buffers for baremetal / kernel safety
+static mut g_arena_storage: [u8; 128] = 0;
+static mut g_vec_storage: [u32; 8] = 0;
+static mut g_str_storage: [u8; 32] = 0;
+
+pub fn main() -> i32 {
+    // ------------------------------------------------------------------------
+    // 1. Arena Allocator (Baremetal / Kernel / Scratchpad)
+    // ------------------------------------------------------------------------
+    let mut arena: ArenaAllocator = arena_new(g_arena_storage as *mut u8, 128);
+    probe arena_used(&arena) == 0, "Initial arena usage should be 0";
+
+    let p1: *mut u8 = arena_alloc(&mut arena, 16, 8);
+    probe p1 != null, "Arena allocation of 16 bytes must succeed";
+    probe arena_used(&arena) >= 16, "Arena used bytes must reflect allocation";
+
+    let p2: *mut u8 = arena_alloc(&mut arena, 32, 16);
+    probe p2 != null, "Aligned arena allocation must succeed";
+
+    arena_reset(&mut arena);
+    probe arena_used(&arena) == 0, "Arena usage after reset must be 0";
+
+    // ------------------------------------------------------------------------
+    // 2. VecU32 (Heapless / Bounded Dynamic Vector)
+    // ------------------------------------------------------------------------
+    let mut v: VecU32 = vec_new(g_vec_storage as *mut u32, 8);
+    probe vec_is_empty(&v), "Vector starts empty";
+
+    vec_push(&mut v, 100);
+    vec_push(&mut v, 200);
+    vec_push(&mut v, 300);
+    probe vec_len(&v) == 3, "Vector length should be 3";
+
+    let item: OptionU32 = vec_get(&v, 1);
+    probe item.has_value && item.value == 200, "Element at index 1 must be 200";
+
+    let popped: OptionU32 = vec_pop(&mut v);
+    probe popped.has_value && popped.value == 300, "Popped element must be 300";
+    probe vec_len(&v) == 2, "Vector length should be 2 after pop";
+
+    // ------------------------------------------------------------------------
+    // 3. StringBuf (Zero-Allocation String Builder)
+    // ------------------------------------------------------------------------
+    let mut sb: StringBuf = string_buf_new(g_str_storage as *mut u8, 32);
+    string_buf_append_str(&mut sb, "Sotlas" as *const u8);
+    string_buf_append_char(&mut sb, 45); // '-'
+    string_buf_append_str(&mut sb, "v1.0" as *const u8);
+
+    probe string_buf_len(&sb) == 11, "StringBuf length must be 11 ('Sotlas-v1.0')";
+
+    // ------------------------------------------------------------------------
+    // 4. File Descriptors (Storage Handles)
+    // ------------------------------------------------------------------------
+    let mut f: File = file_from_raw_fd(3, FileMode::ReadOnly);
+    probe file_is_open(&f), "Raw fd 3 must be reported as open";
+    probe file_raw_descriptor(&f) == 3, "Descriptor fd must match";
+
+    file_close(&mut f);
+    probe !file_is_open(&f), "Descriptor must be closed";
+
+    return 0;
+}

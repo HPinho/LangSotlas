@@ -1,0 +1,193 @@
+module core::fmt;
+
+// ============================================================================
+// core::fmt — Zero-Allocation String Formatting and Display
+// ============================================================================
+//
+// Look ma, zero printf, zero malloc, and zero libc dependencies!
+// We manually format numbers into user-provided buffers by extracting digits
+// in reverse and swapping them in-place. Division right-to-left is how math works
+// on planet Earth.
+// ============================================================================
+
+pub struct Formatter {
+    pub buffer: *mut u8,
+    pub capacity: usize,
+    pub length: usize
+}
+
+pub fn formatter_new(buf: *mut u8, cap: usize) -> Formatter {
+    let mut fmt: Formatter = 0;
+    fmt.buffer = buf;
+    fmt.capacity = cap;
+    fmt.length = 0;
+    if buf != null && cap > 0 {
+        unsafe {
+            *buf = 0;
+        }
+    }
+    return fmt;
+}
+
+pub fn formatter_clear(fmt: *mut Formatter) {
+    if fmt == null {
+        return;
+    }
+    unsafe {
+        (*fmt).length = 0;
+        if (*fmt).buffer != null && (*fmt).capacity > 0 {
+            *(*fmt).buffer = 0;
+        }
+    }
+}
+
+pub fn formatter_as_str(fmt: *const Formatter) -> *const u8 {
+    if fmt == null {
+        return "" as *const u8;
+    }
+    unsafe {
+        if (*fmt).buffer == null {
+            return "" as *const u8;
+        }
+        return (*fmt).buffer as *const u8;
+    }
+}
+
+pub fn formatter_len(fmt: *const Formatter) -> usize {
+    if fmt == null {
+        return 0;
+    }
+    unsafe {
+        return (*fmt).length;
+    }
+}
+
+// Appends raw string slice
+pub fn write_str(fmt: *mut Formatter, s: *const u8) -> bool {
+    if fmt == null || s == null {
+        return false;
+    }
+    unsafe {
+        if (*fmt).buffer == null || (*fmt).length >= (*fmt).capacity {
+            return false;
+        }
+
+        let mut src_idx: usize = 0;
+        let mut cur_len: usize = (*fmt).length;
+        let cap_minus_one: usize = (*fmt).capacity - 1;
+
+        while *(s + src_idx) != 0 && cur_len < cap_minus_one {
+            *((*fmt).buffer + cur_len) = *(s + src_idx);
+            cur_len = cur_len + 1;
+            src_idx = src_idx + 1;
+        }
+
+        *((*fmt).buffer + cur_len) = 0;
+        (*fmt).length = cur_len;
+        return true;
+    }
+}
+
+// Appends a single ASCII character
+pub fn write_char(fmt: *mut Formatter, ch: u8) -> bool {
+    if fmt == null {
+        return false;
+    }
+    unsafe {
+        if (*fmt).buffer == null || (*fmt).length >= ((*fmt).capacity - 1) {
+            return false;
+        }
+        *((*fmt).buffer + (*fmt).length) = ch;
+        (*fmt).length = (*fmt).length + 1;
+        *((*fmt).buffer + (*fmt).length) = 0;
+        return true;
+    }
+}
+
+// Formats u64 to decimal ASCII
+pub fn write_u64(fmt: *mut Formatter, val: u64) -> bool {
+    if fmt == null {
+        return false;
+    }
+
+    if val == 0 {
+        return write_char(fmt, 48); // '0'
+    }
+
+    let mut temp: [u8; 32] = 0;
+    let mut digits: usize = 0;
+    let mut v: u64 = val;
+
+    // Extract digits backwards
+    while v > 0 && digits < 30 {
+        let rem: u8 = (v % 10) as u8;
+        temp[digits] = 48 + rem; // '0' + digit
+        v = v / 10;
+        digits = digits + 1;
+    }
+
+    // Write digits in correct order (reverse of extracted)
+    let mut ok: bool = true;
+    while digits > 0 && ok {
+        digits = digits - 1;
+        ok = write_char(fmt, temp[digits]);
+    }
+
+    return ok;
+}
+
+// Formats i64 with negative sign if applicable
+pub fn write_i64(fmt: *mut Formatter, val: i64) -> bool {
+    if val < 0 {
+        if !write_char(fmt, 45) { // '-'
+            return false;
+        }
+        let pos_val: u64 = (-val) as u64;
+        return write_u64(fmt, pos_val);
+    } else {
+        return write_u64(fmt, val as u64);
+    }
+}
+
+// Formats u64 to hexadecimal (e.g. 0xDEADBEEF)
+pub fn write_hex(fmt: *mut Formatter, val: u64) -> bool {
+    if !write_str(fmt, "0x" as *const u8) {
+        return false;
+    }
+
+    if val == 0 {
+        return write_char(fmt, 48); // '0'
+    }
+
+    let mut temp: [u8; 16] = 0;
+    let mut count: usize = 0;
+    let mut v: u64 = val;
+
+    while v > 0 && count < 16 {
+        let nibble: u8 = (v & 0x0F) as u8;
+        if nibble < 10 {
+            temp[count] = 48 + nibble; // '0'..'9'
+        } else {
+            temp[count] = 65 + (nibble - 10); // 'A'..'F'
+        }
+        v = v >> 4;
+        count = count + 1;
+    }
+
+    let mut ok: bool = true;
+    while count > 0 && ok {
+        count = count - 1;
+        ok = write_char(fmt, temp[count]);
+    }
+
+    return ok;
+}
+
+// Formats boolean as "true" or "false"
+pub fn write_bool(fmt: *mut Formatter, val: bool) -> bool {
+    if val {
+        return write_str(fmt, "true" as *const u8);
+    } else {
+        return write_str(fmt, "false" as *const u8);
+    }
+}

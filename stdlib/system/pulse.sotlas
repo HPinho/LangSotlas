@@ -1,0 +1,172 @@
+module system::pulse;
+
+// ============================================================================
+// Ordens de Memória de Barreira (PulseOrder)
+// ============================================================================
+pub enum PulseOrder {
+    Relaxed = 0,
+    Consume = 1,
+    Acquire = 2,
+    Release = 3,
+    AcqRel = 4,
+    SeqCst = 5,
+}
+
+// ============================================================================
+// PulseU32 — Célula atômica indivisível de 32 bits
+// ============================================================================
+pub struct PulseU32 {
+    pub value: u32;
+
+    pub fn new(val: u32) -> PulseU32 {
+        return PulseU32 { value: val };
+    }
+
+    @system
+    pub fn read(self, order: PulseOrder) -> u32 {
+        unsafe {
+            let addr: u64 = &self.value as *const u32 as u64;
+            return __atomic_load_u32(addr);
+        }
+    }
+
+    @system
+    pub fn write(mut self, val: u32, order: PulseOrder) {
+        unsafe {
+            let addr: u64 = &self.value as *mut u32 as u64;
+            __atomic_store_u32(addr, val);
+        }
+    }
+
+    @system
+    pub fn swap(mut self, val: u32, order: PulseOrder) -> u32 {
+        unsafe {
+            let addr: u64 = &self.value as *mut u32 as u64;
+            return __atomic_exchange_u32(addr, val);
+        }
+    }
+
+    // Permutação condicional atômica (compare-and-swap)
+    // Se o valor atual for igual a `expected`, escreve `desired` e retorna `expected`.
+    // Caso contrário, retorna o valor atual sem alterar a memória.
+    @system
+    pub fn pivot(mut self, expected: u32, desired: u32, succ_order: PulseOrder, fail_order: PulseOrder) -> u32 {
+        unsafe {
+            let addr: u64 = &self.value as *mut u32 as u64;
+            return __atomic_cmpxchg_u32(addr, expected, desired);
+        }
+    }
+
+    @system
+    pub fn fetch_add(mut self, val: u32, order: PulseOrder) -> u32 {
+        unsafe {
+            let addr: u64 = &self.value as *mut u32 as u64;
+            return __atomic_add_u32(addr, val);
+        }
+    }
+
+    @system
+    pub fn fetch_sub(mut self, val: u32, order: PulseOrder) -> u32 {
+        unsafe {
+            let addr: u64 = &self.value as *mut u32 as u64;
+            return __atomic_sub_u32(addr, val);
+        }
+    }
+}
+
+// ============================================================================
+// PulseU64 — Célula atômica indivisível de 64 bits
+// ============================================================================
+pub struct PulseU64 {
+    pub value: u64;
+
+    pub fn new(val: u64) -> PulseU64 {
+        return PulseU64 { value: val };
+    }
+
+    @system
+    pub fn read(self, order: PulseOrder) -> u64 {
+        unsafe {
+            let addr: u64 = &self.value as *const u64 as u64;
+            return __atomic_load_u64(addr);
+        }
+    }
+
+    @system
+    pub fn write(mut self, val: u64, order: PulseOrder) {
+        unsafe {
+            let addr: u64 = &self.value as *mut u64 as u64;
+            __atomic_store_u64(addr, val);
+        }
+    }
+
+    @system
+    pub fn swap(mut self, val: u64, order: PulseOrder) -> u64 {
+        unsafe {
+            let addr: u64 = &self.value as *mut u64 as u64;
+            return __atomic_exchange_u64(addr, val);
+        }
+    }
+
+    @system
+    pub fn pivot(mut self, expected: u64, desired: u64, succ_order: PulseOrder, fail_order: PulseOrder) -> u64 {
+        unsafe {
+            let addr: u64 = &self.value as *mut u64 as u64;
+            return __atomic_cmpxchg_u64(addr, expected, desired);
+        }
+    }
+
+    @system
+    pub fn fetch_add(mut self, val: u64, order: PulseOrder) -> u64 {
+        unsafe {
+            let addr: u64 = &self.value as *mut u64 as u64;
+            return __atomic_add_u64(addr, val);
+        }
+    }
+
+    @system
+    pub fn fetch_sub(mut self, val: u64, order: PulseOrder) -> u64 {
+        unsafe {
+            let addr: u64 = &self.value as *mut u64 as u64;
+            return __atomic_sub_u64(addr, val);
+        }
+    }
+}
+
+// ============================================================================
+// PulseBool — Bandeira booleana atômica
+// ============================================================================
+pub struct PulseBool {
+    pub value: u32;
+
+    pub fn new(val: bool) -> PulseBool {
+        let bit: u32 = if val { 1 } else { 0 };
+        return PulseBool { value: bit };
+    }
+
+    @system
+    pub fn read(self, order: PulseOrder) -> bool {
+        unsafe {
+            let addr: u64 = &self.value as *const u32 as u64;
+            return __atomic_load_u32(addr) != 0;
+        }
+    }
+
+    @system
+    pub fn write(mut self, val: bool, order: PulseOrder) {
+        let bit: u32 = if val { 1 } else { 0 };
+        unsafe {
+            let addr: u64 = &self.value as *mut u32 as u64;
+            __atomic_store_u32(addr, bit);
+        }
+    }
+
+    @system
+    pub fn swap(mut self, val: bool, order: PulseOrder) -> bool {
+        let bit: u32 = if val { 1 } else { 0 };
+        unsafe {
+            let addr: u64 = &self.value as *mut u32 as u64;
+            return __atomic_exchange_u32(addr, bit) != 0;
+        }
+    }
+}

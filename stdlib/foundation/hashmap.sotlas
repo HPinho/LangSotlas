@@ -11,134 +11,236 @@ pub struct HashEntry {
     pub is_occupied: bool;
 }
 
-// Tabela Hash linear de sondagem aberta com chaves de 64 bits
-pub class HashMapU64 {
-    entries: *mut HashEntry;
-    capacity: usize;
-    count: usize;
+// ----------------------------------------------------------------------------
+// 64-bit Linear Probing Open-Addressing Hash Table
+//
+// "Premature optimization is the root of all evil", but linear probing with
+// FNV-1a on flat continuous cache lines is just common sense.
+// If your collision rate exceeds 50%, you either have a bad hash or a bad day.
+// ----------------------------------------------------------------------------
+pub struct HashMapU64 {
+    pub entries: *mut HashEntry;
+    pub capacity: usize;
+    pub count: usize;
+}
 
-    pub fn new(backing_entries: *mut HashEntry, cap: usize) -> HashMapU64 {
-        let mut hm: HashMapU64 = 0;
-        hm.entries = backing_entries;
-        hm.capacity = cap;
-        hm.count = 0;
-
-        if backing_entries != null {
-            let mut i: usize = 0;
+pub fn hashmap_new(backing_entries: *mut HashEntry, cap: usize) -> HashMapU64 {
+    let mut hm: HashMapU64 = 0;
+    hm.entries = backing_entries;
+    hm.capacity = cap;
+    hm.count = 0;
+    if backing_entries != null {
+        let mut i: usize = 0;
+        unsafe {
             while i < cap {
-                unsafe {
-                    let entry: *mut HashEntry = backing_entries + i;
-                    entry.is_occupied = false;
-                    entry.key = 0;
-                    entry.value = 0;
-                }
+                let entry: *mut HashEntry = backing_entries + i;
+                (*entry).is_occupied = false;
+                (*entry).key = 0;
+                (*entry).value = 0;
                 i = i + 1;
             }
         }
-
-        return hm;
     }
+    return hm;
+}
 
-    pub fn len(self: *const HashMapU64) -> usize {
-        if self == null {
-            return 0;
-        }
-        unsafe {
-            return self.count;
-        }
+pub fn hashmap_len(hm: *const HashMapU64) -> usize {
+    if hm == null {
+        return 0;
     }
-
-    pub fn cap(self: *const HashMapU64) -> usize {
-        if self == null {
-            return 0;
-        }
-        unsafe {
-            return self.capacity;
-        }
+    unsafe {
+        return (*hm).count;
     }
+}
 
-    // Algoritmo de hash FNV-1a de 64 bits
-    pub fn hash_key(key: u64) -> u64 {
-        let mut h: u64 = 14695981039346656037;
-        let mut k: u64 = key;
-        let mut i: usize = 0;
-        while i < 8 {
-            let byte_val: u64 = k & 0xFF;
-            h = (h ^ byte_val) * 1099511628211;
-            k = k >> 8;
+pub fn hashmap_cap(hm: *const HashMapU64) -> usize {
+    if hm == null {
+        return 0;
+    }
+    unsafe {
+        return (*hm).capacity;
+    }
+}
+
+// 64-bit FNV-1a Hash Algorithm
+pub fn hash_key(key: u64) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    let mut k: u64 = key;
+    let mut i: usize = 0;
+    while i < 8 {
+        let byte_val: u64 = k & 0xFF;
+        h = (h ^ byte_val) * 1099511628211;
+        k = k >> 8;
+        i = i + 1;
+    }
+    return h;
+}
+
+pub fn hash_str(str_ptr: *const u8, len: usize) -> u64 {
+    if str_ptr == null || len == 0 {
+        return 0;
+    }
+    let mut h: u64 = 0xcbf29ce484222325;
+    let mut i: usize = 0;
+    unsafe {
+        while i < len {
+            let b: u64 = *(str_ptr + i) as u64;
+            h = (h ^ b) * 1099511628211;
             i = i + 1;
         }
-        return h;
     }
+    return h;
+}
 
-    pub fn insert(self: *mut HashMapU64, key: u64, value: u64) -> bool {
-        if self == null {
+pub fn hashmap_insert(hm: *mut HashMapU64, key: u64, value: u64) -> bool {
+    if hm == null {
+        return false;
+    }
+    unsafe {
+        if (*hm).entries == null || (*hm).count >= (*hm).capacity {
             return false;
         }
+        let hash_val: u64 = hash_key(key);
+        let mut index: usize = (hash_val % ((*hm).capacity as u64)) as usize;
+        let mut attempts: usize = 0;
 
-        unsafe {
-            if self.entries == null || self.count >= self.capacity {
+        while attempts < (*hm).capacity {
+            let entry: *mut HashEntry = (*hm).entries + index;
+            if !(*entry).is_occupied || (*entry).key == key {
+                if !(*entry).is_occupied {
+                    (*hm).count = (*hm).count + 1;
+                }
+                (*entry).is_occupied = true;
+                (*entry).key = key;
+                (*entry).value = value;
+                return true;
+            }
+            index = (index + 1) % (*hm).capacity;
+            attempts = attempts + 1;
+        }
+        return false;
+    }
+}
+
+pub fn hashmap_get(hm: *const HashMapU64, key: u64) -> OptionU32 {
+    if hm == null {
+        let mut opt: OptionU32 = 0;
+        opt.has_value = false;
+        opt.value = 0;
+        return opt;
+    }
+    unsafe {
+        if (*hm).entries == null || (*hm).count == 0 {
+            let mut opt: OptionU32 = 0;
+            opt.has_value = false;
+            opt.value = 0;
+            return opt;
+        }
+        let hash_val: u64 = hash_key(key);
+        let mut index: usize = (hash_val % ((*hm).capacity as u64)) as usize;
+        let mut attempts: usize = 0;
+
+        while attempts < (*hm).capacity {
+            let entry: *const HashEntry = (*hm).entries + index;
+            if !(*entry).is_occupied {
+                let mut opt: OptionU32 = 0;
+                opt.has_value = false;
+                opt.value = 0;
+                return opt;
+            }
+            if (*entry).key == key {
+                let mut opt: OptionU32 = 0;
+                opt.has_value = true;
+                opt.value = (*entry).value as u32;
+                return opt;
+            }
+            index = (index + 1) % (*hm).capacity;
+            attempts = attempts + 1;
+        }
+        let mut opt: OptionU32 = 0;
+        opt.has_value = false;
+        opt.value = 0;
+        return opt;
+    }
+}
+
+pub fn hashmap_contains_key(hm: *const HashMapU64, key: u64) -> bool {
+    if hm == null {
+        return false;
+    }
+    let opt: OptionU32 = hashmap_get(hm, key);
+    return opt.has_value;
+}
+
+pub fn hashmap_remove(hm: *mut HashMapU64, key: u64) -> bool {
+    if hm == null {
+        return false;
+    }
+    unsafe {
+        if (*hm).entries == null || (*hm).count == 0 {
+            return false;
+        }
+        let hash_val: u64 = hash_key(key);
+        let mut index: usize = (hash_val % ((*hm).capacity as u64)) as usize;
+        let mut attempts: usize = 0;
+        let mut found: bool = false;
+
+        while attempts < (*hm).capacity {
+            let entry: *mut HashEntry = (*hm).entries + index;
+            if !(*entry).is_occupied {
                 return false;
             }
-
-            let hash_val: u64 = HashMapU64::hash_key(key);
-            let mut index: usize = (hash_val % (self.capacity as u64)) as usize;
-            let mut attempts: usize = 0;
-
-            while attempts < self.capacity {
-                let entry: *mut HashEntry = self.entries + index;
-                if !entry.is_occupied || entry.key == key {
-                    if !entry.is_occupied {
-                        self.count = self.count + 1;
-                    }
-                    entry.is_occupied = true;
-                    entry.key = key;
-                    entry.value = value;
-                    return true;
-                }
-                index = (index + 1) % self.capacity;
-                attempts = attempts + 1;
+            if (*entry).key == key {
+                (*entry).is_occupied = false;
+                (*entry).key = 0;
+                (*entry).value = 0;
+                (*hm).count = (*hm).count - 1;
+                found = true;
+                break;
             }
+            index = (index + 1) % (*hm).capacity;
+            attempts = attempts + 1;
+        }
+
+        if !found {
             return false;
         }
-    }
 
-    pub fn get(self: *const HashMapU64, key: u64) -> OptionU32 {
-        if self == null {
-            return OptionU32 { has_value: false, value: 0 };
-        }
-
-        unsafe {
-            if self.entries == null || self.count == 0 {
-                return OptionU32 { has_value: false, value: 0 };
+        let mut next_idx: usize = (index + 1) % (*hm).capacity;
+        while attempts < (*hm).capacity {
+            let curr: *mut HashEntry = (*hm).entries + next_idx;
+            if !(*curr).is_occupied {
+                break;
             }
-
-            let hash_val: u64 = HashMapU64::hash_key(key);
-            let mut index: usize = (hash_val % (self.capacity as u64)) as usize;
-            let mut attempts: usize = 0;
-
-            while attempts < self.capacity {
-                let entry: *const HashEntry = self.entries + index;
-                if !entry.is_occupied {
-                    return OptionU32 { has_value: false, value: 0 };
-                }
-                if entry.key == key {
-                    return OptionU32 { has_value: true, value: entry.value as u32 };
-                }
-                index = (index + 1) % self.capacity;
-                attempts = attempts + 1;
-            }
-            return OptionU32 { has_value: false, value: 0 };
+            let k: u64 = (*curr).key;
+            let v: u64 = (*curr).value;
+            (*curr).is_occupied = false;
+            (*curr).key = 0;
+            (*curr).value = 0;
+            (*hm).count = (*hm).count - 1;
+            hashmap_insert(hm, k, v);
+            next_idx = (next_idx + 1) % (*hm).capacity;
+            attempts = attempts + 1;
         }
+        return true;
     }
+}
 
-    pub fn contains_key(self: *const HashMapU64, key: u64) -> bool {
-        if self == null {
-            return false;
+pub fn hashmap_clear(hm: *mut HashMapU64) {
+    if hm == null {
+        return;
+    }
+    unsafe {
+        if (*hm).entries != null {
+            let mut i: usize = 0;
+            while i < (*hm).capacity {
+                let entry: *mut HashEntry = (*hm).entries + i;
+                (*entry).is_occupied = false;
+                (*entry).key = 0;
+                (*entry).value = 0;
+                i = i + 1;
+            }
         }
-        unsafe {
-            let opt: OptionU32 = self.get(key);
-            return opt.has_value;
-        }
+        (*hm).count = 0;
     }
 }

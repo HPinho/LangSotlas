@@ -130,3 +130,28 @@ pub fn str_concat(dest: *mut u8, src: *const u8, max_len: usize) -> usize {
     return dest_len + i;
 }
 
+pub fn str_to_u64(s: *const u8) -> u64 {
+    if s == null { return 0; }
+    let mut res: u64 = 0;
+    let mut i: usize = 0;
+    unsafe {
+        while s[i] >= 48 && s[i] <= 57 {
+            res = res * 10 + (s[i] - 48) as u64;
+            i = i + 1;
+        }
+    }
+    return res;
+}
+
+pub fn str_starts_with(str: *const u8, prefix: *const u8) -> bool {
+    if str == null || prefix == null { return false; }
+    let mut i: usize = 0;
+    unsafe {
+        while prefix[i] != 0 {
+            if str[i] != prefix[i] { return false; }
+            i = i + 1;
+        }
+    }
+    return true;
+}
+

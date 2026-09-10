@@ -1,79 +1,98 @@
 module foundation::alloc;
 
-// Representação de bloco alocado na memória
+// ----------------------------------------------------------------------------
+// foundation::alloc — Deterministic Memory Allocation Primitives
+// ----------------------------------------------------------------------------
+//
+// Designed for three tiers:
+// 1. Baremetal: operates directly on raw physical address ranges and BSS sections.
+// 2. Kernel: page-frame bump allocations with zero heap fragmentation.
+// 3. High-level: scratchpad arena allocations that reset in O(1).
+//
+// Developer note:
+// "Any problem in computer science can be solved by adding another layer of indirection,
+// except for the problem of too many layers of indirection."
+// Here, we have zero indirection. It's a pointer and an offset. Enjoy.
+// ----------------------------------------------------------------------------
+
 pub struct MemoryBlock {
     pub ptr: *mut u8;
     pub size: usize;
     pub alignment: usize;
 }
 
-// Arena Allocator de alto desempenho para alocações contíguas em lote
-pub class ArenaAllocator {
-    buffer: *mut u8;
-    capacity: usize;
-    offset: usize;
+// Arena Allocator for high-performance contiguous batch allocation
+pub struct ArenaAllocator {
+    pub buffer: *mut u8;
+    pub capacity: usize;
+    pub offset: usize;
+}
 
-    pub fn new(backing_buffer: *mut u8, cap: usize) -> ArenaAllocator {
-        let mut arena: ArenaAllocator = 0;
-        arena.buffer = backing_buffer;
-        arena.capacity = cap;
-        arena.offset = 0;
-        return arena;
+pub fn arena_new(backing_buffer: *mut u8, cap: usize) -> ArenaAllocator {
+    let mut arena: ArenaAllocator = 0;
+    arena.buffer = backing_buffer;
+    arena.capacity = cap;
+    arena.offset = 0;
+    return arena;
+}
+
+pub fn arena_alloc(arena: *mut ArenaAllocator, size: usize, align: usize) -> *mut u8 {
+    if arena == null {
+        return null;
     }
-
-    pub fn allocate(self: *mut ArenaAllocator, size: usize, align: usize) -> *mut u8 {
-        if self == null {
+    unsafe {
+        if (*arena).buffer == null || size == 0 {
             return null;
         }
 
+        let mut alignment: usize = align;
+        if alignment == 0 {
+            alignment = 8;
+        }
+
+        let current: usize = ((*arena).buffer as usize) + (*arena).offset;
+        let remainder: usize = current % alignment;
+        let mut padding: usize = 0;
+        if remainder != 0 {
+            padding = alignment - remainder;
+        }
+
+        if (*arena).offset + padding + size > (*arena).capacity {
+            return null; // Arena is exhausted
+        }
+
+        (*arena).offset = (*arena).offset + padding;
+        let result: *mut u8 = (*arena).buffer + (*arena).offset;
+        (*arena).offset = (*arena).offset + size;
+        return result;
+    }
+}
+
+pub fn arena_reset(arena: *mut ArenaAllocator) {
+    if arena != null {
         unsafe {
-            if self.buffer == null {
-                return null;
-            }
-
-            let mut alignment: usize = align;
-            if alignment == 0 {
-                alignment = 8;
-            }
-
-            let current: usize = (self.buffer as usize) + self.offset;
-            let remainder: usize = current % alignment;
-            let padding: usize = if remainder == 0 { 0 } else { alignment - remainder };
-
-            if self.offset + padding + size > self.capacity {
-                return null; // Arena cheia
-            }
-
-            self.offset = self.offset + padding;
-            let result: *mut u8 = self.buffer + self.offset;
-            self.offset = self.offset + size;
-            return result;
+            (*arena).offset = 0;
         }
     }
+}
 
-    pub fn reset(self: *mut ArenaAllocator) {
-        if self != null {
-            unsafe {
-                self.offset = 0;
-            }
-        }
+pub fn arena_remaining(arena: *const ArenaAllocator) -> usize {
+    if arena == null {
+        return 0;
     }
-
-    pub fn bytes_used(self: *const ArenaAllocator) -> usize {
-        if self == null {
+    unsafe {
+        if (*arena).offset >= (*arena).capacity {
             return 0;
         }
-        unsafe {
-            return self.offset;
-        }
+        return (*arena).capacity - (*arena).offset;
     }
+}
 
-    pub fn bytes_remaining(self: *const ArenaAllocator) -> usize {
-        if self == null {
-            return 0;
-        }
-        unsafe {
-            return self.capacity - self.offset;
-        }
+pub fn arena_used(arena: *const ArenaAllocator) -> usize {
+    if arena == null {
+        return 0;
+    }
+    unsafe {
+        return (*arena).offset;
     }
 }

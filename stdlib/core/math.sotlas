@@ -1,0 +1,133 @@
+module core::math;
+
+// Absolute value for 32-bit signed integers
+pub fn abs(x: i32) -> i32 {
+    if x < 0 {
+        return -x;
+    }
+    return x;
+}
+
+// Absolute value for 64-bit signed integers
+pub fn abs64(x: i64) -> i64 {
+    if x < 0 {
+        return -x;
+    }
+    return x;
+}
+
+// Minimum of two 32-bit signed integers
+pub fn min(a: i32, b: i32) -> i32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+// Maximum of two 32-bit signed integers
+pub fn max(a: i32, b: i32) -> i32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+// Minimum of two 32-bit unsigned integers
+pub fn min_u32(a: u32, b: u32) -> u32 {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+// Maximum of two 32-bit unsigned integers
+pub fn max_u32(a: u32, b: u32) -> u32 {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+// Clamps value between lower and upper bounds
+pub fn clamp(val: i32, low: i32, high: i32) -> i32 {
+    if val < low {
+        return low;
+    }
+    if val > high {
+        return high;
+    }
+    return val;
+}
+
+// Clamps unsigned 32-bit value
+pub fn clamp_u32(val: u32, low: u32, high: u32) -> u32 {
+    if val < low {
+        return low;
+    }
+    if val > high {
+        return high;
+    }
+    return val;
+}
+
+// Integer exponentiation (base^exp)
+pub fn pow(base: u64, exp: u32) -> u64 {
+    let mut result: u64 = 1;
+    let mut b: u64 = base;
+    let mut e: u32 = exp;
+    while e > 0 {
+        if (e & 1) != 0 {
+            result = result * b;
+        }
+        b = b * b;
+        e = e >> 1;
+    }
+    return result;
+}
+
+// Integer square root via integer Newton-Raphson iterations.
+// It's fast, integer-exact, and doesn't wake up the FPU from its beauty sleep.
+pub fn sqrt(val: u64) -> u64 {
+    if val == 0 || val == 1 {
+        return val;
+    }
+    let mut x0: u64 = val >> 1;
+    if x0 == 0 {
+        return 1;
+    }
+    let mut x1: u64 = (x0 + (val / x0)) >> 1;
+    while x1 < x0 {
+        x0 = x1;
+        x1 = (x0 + (val / x0)) >> 1;
+    }
+    return x0;
+}
+
+// Babylonian method for square root: 10 iterations of pure arithmetic bliss.
+// No libm, no dynamic linking, just Newton-Raphson converging like clockwork.
+pub fn sqrt_f32(val: f32) -> f32 {
+    if val <= 0.0 {
+        return 0.0;
+    }
+    let mut x: f32 = val;
+    let mut i: u32 = 0;
+    while i < 10 {
+        x = 0.5 * (x + (val / x));
+        i = i + 1;
+    }
+    return x;
+}
+
+// Float64 square root approximation
+pub fn sqrt_f64(val: f64) -> f64 {
+    if val <= 0.0 {
+        return 0.0;
+    }
+    let mut x: f64 = val;
+    let mut i: u32 = 0;
+    while i < 15 {
+        x = 0.5 * (x + (val / x));
+        i = i + 1;
+    }
+    return x;
+}

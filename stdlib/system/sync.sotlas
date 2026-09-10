@@ -43,21 +43,22 @@ pub fn cpu_pause() {
 }
 
 // ============================================================================
+// Ordens de Memória Atômicas (C11 / LLVM Memory Ordering)
+// ============================================================================
+pub enum MemoryOrder {
+    Relaxed = 0,
+    Consume = 1,
+    Acquire = 2,
+    Release = 3,
+    AcqRel = 4,
+    SeqCst = 5
+}
+
+// ============================================================================
 // SpinLock — Bloqueio de rotação atômico para SMP
 // ============================================================================
 //
-// Usa xchg atômico (implicitly locked no x86-64) para garantir que apenas uma
-// CPU entre na seção crítica. A implementação anterior usava check-then-set
-// não-atômico, que é uma race condition clássica em SMP:
-//
-//   CPU0: observa locked == 0          CPU1: observa locked == 0
-//   CPU0: locked = 1                   CPU1: locked = 1
-//   → Ambas entram na seção crítica!
-//
-// Com xchg atômico:
-//   CPU0: xchg(locked, 1) retorna 0 → entra
-//   CPU1: xchg(locked, 1) retorna 1 → espera
-//
+// Invariant: Uses atomic xchg with sequential consistency to guarantee mutual exclusion in SMP.
 pub struct SpinLock {
     pub locked: u32;
 
@@ -116,6 +117,95 @@ pub struct SpinLock {
 
     pub fn is_locked(self) -> bool {
         return self.locked != 0;
+    }
+}
+
+// ============================================================================
+// SpinLockGuard — Sentinela RAII soberana que destranca ao sair do escopo
+// ============================================================================
+// Por ser declarada como `sole struct`, não pode ser duplicada por cópia.
+pub sole struct SpinLockGuard {
+    pub lock_ptr: *mut SpinLock;
+
+    pub fn new(lp: *mut SpinLock) -> SpinLockGuard {
+        unsafe {
+            if lp != null {
+                (*lp).lock();
+            }
+        }
+        return SpinLockGuard { lock_ptr: lp };
+    }
+
+    @system
+    pub fn deinit(mut self) {
+        unsafe {
+            if self.lock_ptr != null {
+                (*self.lock_ptr).unlock();
+                self.lock_ptr = null;
+            }
+        }
+    }
+}
+
+// ============================================================================
+// ShieldClinch — Trava atômica com blindagem de hardware contra interrupções
+// ============================================================================
+//
+// Combina a exclusão mútua do SpinLock com a blindagem de interrupções (IRQ save/restore).
+// É a forma canônica e segura para sincronização entre threads e tratadores
+// de interrupção (ISR) no Baken OS, eliminando completamente deadlocks por IRQ.
+pub struct ShieldClinch {
+    pub lock: SpinLock;
+
+    pub fn new() -> ShieldClinch {
+        return ShieldClinch { lock: SpinLock::new() };
+    }
+
+    @system
+    pub fn clinch_shield(mut self) -> u64 {
+        let flags: u64 = __irq_save_disable();
+        self.lock.lock();
+        return flags;
+    }
+
+    @system
+    pub fn release_shield(mut self, flags: u64) {
+        self.lock.unlock();
+        __irq_restore(flags);
+    }
+}
+
+// ============================================================================
+// ShieldGuard — Sentinela RAII soberana com blindagem de interrupções
+// ============================================================================
+//
+// Como é uma `sole struct`, não pode ser duplicada nem copiada acidentalmente.
+// Ao sair do escopo, seu `deinit` destranca e restaura as flags da CPU automaticamente.
+pub sole struct ShieldGuard {
+    pub clinch_ptr: *mut ShieldClinch;
+    pub flags: u64;
+
+    pub fn new(cp: *mut ShieldClinch) -> ShieldGuard {
+        let mut saved_flags: u64 = 0;
+        unsafe {
+            if cp != null {
+                saved_flags = (*cp).clinch_shield();
+            }
+        }
+        return ShieldGuard {
+            clinch_ptr: cp,
+            flags: saved_flags,
+        };
+    }
+
+    @system
+    pub fn deinit(mut self) {
+        unsafe {
+            if self.clinch_ptr != null {
+                (*self.clinch_ptr).release_shield(self.flags);
+                self.clinch_ptr = null;
+            }
+        }
     }
 }
 

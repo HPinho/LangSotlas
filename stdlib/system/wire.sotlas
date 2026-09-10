@@ -1,0 +1,32 @@
+module system::wire;
+
+// ============================================================================
+// Wire — Condutor volátil de hardware para registradores MMIO
+// ============================================================================
+//
+// Representa um canal de acesso direto a dispositivo de hardware mapeado
+// em memória (MMIO). Leituras (.read()) e escritas (.write()) através de
+// um Wire nunca são omitidas, descartadas ou reordenadas pelo otimizador.
+pub struct Wire forge<T> {
+    pub address: u64;
+
+    pub fn from_raw(addr: u64) -> Wire forge<T> {
+        return Wire { address: addr };
+    }
+
+    @system
+    pub fn read(self) -> T {
+        unsafe {
+            let ptr: *const T = self.address as *const T;
+            return *ptr;
+        }
+    }
+
+    @system
+    pub fn write(self, val: T) {
+        unsafe {
+            let ptr: *mut T = self.address as *mut T;
+            *ptr = val;
+        }
+    }
+}

@@ -1,0 +1,152 @@
+module foundation::engrave;
+
+// ============================================================================
+// Engrave — In-Place Stack Formatter & Numeric Renderer (Zero Heap)
+// ============================================================================
+//
+// Formats integers and pointers directly into caller-provided stack buffers.
+// Never touches heap memory, making it fully safe for barecore environments,
+// OS kernels, interrupt service routines (ISRs), and panic handlers.
+
+pub struct EngraveSlice {
+    pub ptr: *const u8;
+    pub len: usize;
+}
+
+@system
+pub fn engrave_u64_decimal(val: u64, buf: *mut u8, cap: usize) -> usize {
+    if buf == null || cap == 0 {
+        return 0;
+    }
+    if val == 0 {
+        unsafe {
+            *buf = 48 as u8; // '0'
+        }
+        return 1;
+    }
+
+    unsafe {
+        let mut temp: [u8; 32] = [0 as u8; 32];
+        let mut n: u64 = val;
+        let mut idx: usize = 0;
+
+        while n > 0 && idx < 32 {
+            let digit: u8 = ((n % 10) as u8) + (48 as u8);
+            let ptr_temp: *mut u8 = (&mut temp[idx]) as *mut u8;
+            *ptr_temp = digit;
+            n = n / 10;
+            idx = idx + 1;
+        }
+
+        let mut written: usize = 0;
+        while idx > 0 && written < cap {
+            idx = idx - 1;
+            let p_src: *const u8 = (&temp[idx]) as *const u8;
+            let p_dst: *mut u8 = (buf + written) as *mut u8;
+            *p_dst = *p_src;
+            written = written + 1;
+        }
+        return written;
+    }
+}
+
+@system
+pub fn engrave_u64_hex(val: u64, buf: *mut u8, cap: usize, prefix: bool) -> usize {
+    if buf == null || cap == 0 {
+        return 0;
+    }
+
+    unsafe {
+        let mut written: usize = 0;
+        if prefix && cap >= 2 {
+            let p0: *mut u8 = buf;
+            let p1: *mut u8 = (buf + 1) as *mut u8;
+            *p0 = 48 as u8; // '0'
+            *p1 = 120 as u8; // 'x'
+            written = 2;
+        }
+
+        if val == 0 {
+            if written < cap {
+                let p: *mut u8 = (buf + written) as *mut u8;
+                *p = 48 as u8;
+                written = written + 1;
+            }
+            return written;
+        }
+
+        let mut temp: [u8; 16] = [0 as u8; 16];
+        let mut n: u64 = val;
+        let mut idx: usize = 0;
+
+        while n > 0 && idx < 16 {
+            let nibble: u8 = (n & 15) as u8;
+            let ch: u8 = if nibble < 10 {
+                (48 as u8) + nibble
+            } else {
+                (97 as u8) + (nibble - 10)
+            };
+            let ptr_temp: *mut u8 = (&mut temp[idx]) as *mut u8;
+            *ptr_temp = ch;
+            n = n >> 4;
+            idx = idx + 1;
+        }
+
+        while idx > 0 && written < cap {
+            idx = idx - 1;
+            let p_src: *const u8 = (&temp[idx]) as *const u8;
+            let p_dst: *mut u8 = (buf + written) as *mut u8;
+            *p_dst = *p_src;
+            written = written + 1;
+        }
+        return written;
+    }
+}
+
+@system
+pub fn engrave_u64_bin(val: u64, buf: *mut u8, cap: usize, prefix: bool) -> usize {
+    if buf == null || cap == 0 {
+        return 0;
+    }
+
+    unsafe {
+        let mut written: usize = 0;
+        if prefix && cap >= 2 {
+            let p0: *mut u8 = buf;
+            let p1: *mut u8 = (buf + 1) as *mut u8;
+            *p0 = 48 as u8; // '0'
+            *p1 = 98 as u8; // 'b'
+            written = 2;
+        }
+
+        if val == 0 {
+            if written < cap {
+                let p: *mut u8 = (buf + written) as *mut u8;
+                *p = 48 as u8;
+                written = written + 1;
+            }
+            return written;
+        }
+
+        let mut temp: [u8; 64] = [0 as u8; 64];
+        let mut n: u64 = val;
+        let mut idx: usize = 0;
+
+        while n > 0 && idx < 64 {
+            let bit: u8 = (n & 1) as u8;
+            let ptr_temp: *mut u8 = (&mut temp[idx]) as *mut u8;
+            *ptr_temp = (48 as u8) + bit;
+            n = n >> 1;
+            idx = idx + 1;
+        }
+
+        while idx > 0 && written < cap {
+            idx = idx - 1;
+            let p_src: *const u8 = (&temp[idx]) as *const u8;
+            let p_dst: *mut u8 = (buf + written) as *mut u8;
+            *p_dst = *p_src;
+            written = written + 1;
+        }
+        return written;
+    }
+}

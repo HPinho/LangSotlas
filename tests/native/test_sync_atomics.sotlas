@@ -1,0 +1,102 @@
+module test::native::sync_atomics;
+
+// Verificação nativa de sincronização atômica, barreiras pulse e seções blindadas clinch/revert
+
+struct SpinLock {
+    locked: u32
+}
+
+pub fn spinlock_new() -> SpinLock {
+    let mut sl: SpinLock = 0;
+    sl.locked = 0;
+    return sl;
+}
+
+pub fn spinlock_try_lock(sl: *mut SpinLock) -> bool {
+    let addr: u64 = sl as u64;
+    if __atomic_exchange_u32(addr, 1) == 0 {
+        pulse;
+        return true;
+    }
+    return false;
+}
+
+pub fn spinlock_unlock(sl: *mut SpinLock) {
+    pulse;
+    let addr: u64 = sl as u64;
+    __atomic_store_u32(addr, 0);
+    pulse;
+}
+
+pub fn test_atomic_intrinsics() -> bool {
+    let mut val: u32 = 42;
+    let addr: u64 = &val as *mut u32 as u64;
+
+    let loaded: u32 = __atomic_load_u32(addr);
+    probe loaded == 42, "Atomic load deve ler o valor inicial 42";
+
+    let old_val: u32 = __atomic_exchange_u32(addr, 100);
+    probe old_val == 42, "Atomic exchange deve retornar o valor antigo 42";
+    probe val == 100, "Valor na memoria atualizado para 100";
+
+    let ok: bool = __atomic_cmpxchg_u32(addr, 100, 200);
+    probe ok, "Cmpxchg deve ter sucesso ao encontrar 100";
+    probe val == 200, "Valor atualizado para 200 via cmpxchg";
+
+    let failed: bool = __atomic_cmpxchg_u32(addr, 999, 300);
+    probe !failed, "Cmpxchg deve falhar se o valor esperado nao casar";
+    probe val == 200, "Valor permanece 200 apos falha no cmpxchg";
+
+    return true;
+}
+
+pub fn test_pulse_barrier() -> bool {
+    // Barreira de memoria mfence de hardware
+    pulse;
+    let mut canary: u32 = 1234;
+    canary = canary + 1;
+    pulse;
+    probe canary == 1235, "Canary incrementado sob barreiras pulse";
+    return true;
+}
+
+pub fn test_clinch_and_revert() -> bool {
+    // Seção blindada de interrupções (clinch = save/disable, revert = restore)
+    clinch;
+    let mut critical_data: u64 = 0xABCD1234;
+    critical_data = critical_data + 1;
+    revert;
+    probe critical_data == 0xABCD1235, "Secao blindada clinch/revert executada";
+    return true;
+}
+
+pub fn test_spinlock() -> bool {
+    let mut sl: SpinLock = spinlock_new();
+    let sl_ptr: *mut SpinLock = &mut sl;
+    probe sl.locked == 0, "SpinLock inicia destrancado (0)";
+
+    let acquired: bool = spinlock_try_lock(sl_ptr);
+    probe acquired, "Primeira tentativa de lock deve obter sucesso";
+    probe sl.locked == 1, "SpinLock esta trancado (1)";
+
+    let re_acquire: bool = spinlock_try_lock(sl_ptr);
+    probe !re_acquire, "Segunda tentativa de lock imediata deve falhar";
+
+    spinlock_unlock(sl_ptr);
+    probe sl.locked == 0, "SpinLock foi destrancado com sucesso";
+
+    let acquired_again: bool = spinlock_try_lock(sl_ptr);
+    probe acquired_again, "Deve conseguir adquirir o lock novamente";
+    spinlock_unlock(sl_ptr);
+    probe sl.locked == 0, "Lock livre apos segundo unlock";
+
+    return true;
+}
+
+pub fn main() -> i32 {
+    probe test_atomic_intrinsics(), "test_atomic_intrinsics passou";
+    probe test_pulse_barrier(), "test_pulse_barrier passou";
+    probe test_clinch_and_revert(), "test_clinch_and_revert passou";
+    probe test_spinlock(), "test_spinlock passou";
+    return 0;
+}

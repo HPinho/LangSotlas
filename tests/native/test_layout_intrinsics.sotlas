@@ -1,0 +1,63 @@
+module test::native::layout_intrinsics;
+
+struct Header {
+    magic: u32,
+    flags: u16,
+    version: u16,
+    payload_size: u64
+}
+
+pub fn test_span_and_stride() -> bool {
+    let sz_u8: usize = span_of::<u8>();
+    probe sz_u8 == 1, "span_of u8 must be 1";
+
+    let sz_u16: usize = span_of::<u16>();
+    probe sz_u16 == 2, "span_of u16 must be 2";
+
+    let sz_u32: usize = span_of::<u32>();
+    probe sz_u32 == 4, "span_of u32 must be 4";
+
+    let sz_u64: usize = span_of::<u64>();
+    probe sz_u64 == 8, "span_of u64 must be 8";
+
+    let stride_u64: usize = stride_of::<u64>();
+    probe stride_u64 == 8, "stride_of u64 must be 8";
+
+    return true;
+}
+
+pub fn test_align_of() -> bool {
+    let al_u8: usize = align_of::<u8>();
+    probe al_u8 == 1, "align_of u8 must be 1";
+
+    let al_u32: usize = align_of::<u32>();
+    probe al_u32 == 4, "align_of u32 must be 4";
+
+    let al_u64: usize = align_of::<u64>();
+    probe al_u64 == 8, "align_of u64 must be 8";
+
+    return true;
+}
+
+pub fn test_field_offsets() -> bool {
+    let off_magic: usize = field_offset!(Header, magic);
+    probe off_magic == 0, "magic offset must be 0";
+
+    let off_flags: usize = field_offset!(Header, flags);
+    probe off_flags == 4, "flags offset must be 4";
+
+    let off_version: usize = field_offset!(Header, version);
+    probe off_version == 6, "version offset must be 6";
+
+    let off_payload: usize = field_offset!(Header, payload_size);
+    probe off_payload == 8, "payload_size offset must be 8";
+
+    return true;
+}
+
+pub fn main() -> i32 {
+    probe test_span_and_stride(), "span and stride passed";
+    probe test_align_of(), "align_of passed";
+    probe test_field_offsets(), "field_offset passed";
+    return 0;
+}

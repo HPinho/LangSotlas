@@ -1,0 +1,43 @@
+module test::native::for_range;
+
+pub fn test_basic_sum_range() -> bool {
+    let mut sum: u32 = 0;
+    for i in 1..11 {
+        sum = sum + (i as u32);
+    }
+    // 1 + 2 + ... + 10 = 55
+    probe sum == 55, "sum of 1..10 must equal 55";
+    return true;
+}
+
+pub fn test_nested_ranges() -> bool {
+    let mut matrix_sum: i64 = 0;
+    for row in 0..4 {
+        for col in 0..4 {
+            matrix_sum = matrix_sum + (row * 10 + col);
+        }
+    }
+    // row sum: (0+1+2+3)*10 * 4 = 60 * 4 = 240
+    // col sum: (0+1+2+3) * 4 = 6 * 4 = 24
+    // total = 264
+    probe matrix_sum == 264, "nested 4x4 matrix sum must equal 264";
+    return true;
+}
+
+pub fn test_range_with_step_logic() -> bool {
+    let mut evens_count: u32 = 0;
+    for k in 0..20 {
+        if k % 2 == 0 {
+            evens_count = evens_count + 1;
+        }
+    }
+    probe evens_count == 10, "evens in 0..19 must equal 10";
+    return true;
+}
+
+pub fn main() -> i32 {
+    probe test_basic_sum_range(), "basic sum range passed";
+    probe test_nested_ranges(), "nested ranges passed";
+    probe test_range_with_step_logic(), "step logic in range passed";
+    return 0;
+}

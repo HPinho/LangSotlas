@@ -56,16 +56,18 @@ TOPOLOGY_NAME_MAP: Dict[TK, str] = {
 # ---------------------------------------------------------------------------
 
 class Symbol:
-    __slots__ = ("name", "kind", "type_node", "span", "is_island", "is_moved")
+    __slots__ = ("name", "kind", "type_node", "span", "is_island", "is_moved", "is_sole")
 
     def __init__(self, name: str, kind: str, type_node: Optional[TypeNode],
-                 span: Span, is_island: bool = False, is_moved: bool = False) -> None:
+                 span: Span, is_island: bool = False, is_moved: bool = False,
+                 is_sole: bool = False) -> None:
         self.name = name
         self.kind = kind          # "var" | "let" | "fn" | "type" | "param"
         self.type_node = type_node
         self.span = span
         self.is_island = is_island
         self.is_moved = is_moved
+        self.is_sole = is_sole
 
 
 class Scope:
@@ -112,6 +114,16 @@ class Sema:
         # Quando True, identificadores não resolvidos são aceitos (campo de self implícito)
         self._in_method: bool = False
         self._enums: Dict[str, EnumDeclNode] = {}
+        self._structs: Dict[str, StructDeclNode] = {}
+
+    def _is_type_sole(self, type_node: Optional[TypeNode]) -> bool:
+        if not type_node:
+            return False
+        if getattr(type_node, "ownership", None) == TK.KW_SOLE:
+            return True
+        if type_node.name and type_node.name in self._structs:
+            return getattr(self._structs[type_node.name], "is_sole", False)
+        return False
 
     @property
     def errors(self) -> List[SotlasSemaError]:
@@ -176,6 +188,8 @@ class Sema:
                         if isinstance(decl, (StructDeclNode, ClassDeclNode, MeshDeclNode,
                                              SpecDeclNode, EnumDeclNode)):
                             self._global.define(Symbol(decl.name, "type", None, decl.span))
+                            if isinstance(decl, StructDeclNode):
+                                self._structs[decl.name] = decl
                         elif isinstance(decl, (FnDeclNode, TrapFnDeclNode)):
                             self._global.define(Symbol(decl.name, "fn", None, decl.span))
                         elif isinstance(decl, ConstDeclNode):
@@ -190,7 +204,7 @@ class Sema:
 
     def _pass1_collect(self) -> None:
         self._collect_imported_symbols()
-        for builtin_t in ("Enclave", "SpinLock", "Vec", "String", "Option", "Result", "Self"):
+        for builtin_t in ("Enclave", "SpinLock", "ShieldClinch", "ShieldGuard", "SpinLockGuard", "Vec", "String", "Option", "Result", "Self"):
             self._global.define(Symbol(builtin_t, "type", None, Span(self._fn, 0, 0)))
         for builtin_fn in (
             "__dma_fence", "__sfence", "__lfence", "__cpu_pause",
@@ -212,6 +226,8 @@ class Sema:
                 self._global.define(sym)
                 if isinstance(decl, EnumDeclNode):
                     self._enums[decl.name] = decl
+                elif isinstance(decl, StructDeclNode):
+                    self._structs[decl.name] = decl
             elif isinstance(decl, FnDeclNode):
                 sym = Symbol(decl.name, "fn", None, decl.span)
                 self._global.define(sym)
@@ -523,15 +539,38 @@ class Sema:
             if self._is_barecore:
                 self._assert_no_dynamic_alloc(stmt.type_ann, stmt.span)
         self._check_expr(stmt.init, scope)
-        if stmt.type_ann and isinstance(stmt.init, IdentNode):
+
+        is_sole = self._is_type_sole(stmt.type_ann)
+        if isinstance(stmt.init, IdentNode):
             src_sym = scope.lookup(stmt.init.name)
-            if src_sym and src_sym.type_node:
-                self._check_assignment_topology(stmt.type_ann, src_sym.type_node, stmt.span)
-                if getattr(src_sym.type_node, "ownership", None) == TK.KW_SOLE:
+            if src_sym:
+                if stmt.type_ann and src_sym.type_node:
+                    self._check_assignment_topology(stmt.type_ann, src_sym.type_node, stmt.span)
+                if self._is_type_sole(src_sym.type_node) or getattr(src_sym, "is_sole", False):
                     src_sym.is_moved = True
+                    is_sole = True
+                    if not stmt.type_ann and src_sym.type_node:
+                        stmt.type_ann = src_sym.type_node
+        elif isinstance(stmt.init, StructLitExprNode):
+            if stmt.init.struct_name in self._structs and self._structs[stmt.init.struct_name].is_sole:
+                is_sole = True
+        elif isinstance(stmt.init, CallExprNode):
+            callee_str = ""
+            if isinstance(stmt.init.callee, IdentNode):
+                callee_str = stmt.init.callee.name
+                if stmt.init.callee.path:
+                    callee_str = "::".join(stmt.init.callee.path)
+            for sname, sdecl in self._structs.items():
+                if sdecl.is_sole and (callee_str.startswith(sname) or callee_str.endswith(sname)):
+                    is_sole = True
+                    break
+
         is_island = stmt.type_ann is not None and self._type_is_island(stmt.type_ann)
         sym = Symbol(stmt.name, "var" if stmt.is_var else "let",
                      stmt.type_ann, stmt.span, is_island=is_island)
+        sym.is_sole = is_sole
+        if is_sole and sym.type_node:
+            sym.type_node.ownership = TK.KW_SOLE
         scope.define(sym)
         if is_island:
             self._island_vars.add(stmt.name)
@@ -545,15 +584,16 @@ class Sema:
         # Regra de segurança: rawphys ↔ virtmap ↔ dmazone não podem ser misturados sem cast
         if isinstance(stmt.target, IdentNode):
             dest_sym = scope.lookup(stmt.target.name)
-            if dest_sym and dest_sym.type_node:
+            if dest_sym:
                 src_type = None
                 if isinstance(stmt.value, IdentNode):
                     src_sym = scope.lookup(stmt.value.name)
                     if src_sym:
                         src_type = src_sym.type_node
-                        if getattr(src_sym.type_node, "ownership", None) == TK.KW_SOLE:
+                        if self._is_type_sole(src_sym.type_node) or getattr(src_sym, "is_sole", False):
                             src_sym.is_moved = True
-                self._check_assignment_topology(dest_sym.type_node, src_type, stmt.span)
+                if dest_sym.type_node:
+                    self._check_assignment_topology(dest_sym.type_node, src_type, stmt.span)
 
     def _check_assignment_topology(self, dest_type: TypeNode, src_type: Optional[TypeNode], span: Span) -> None:
         """Bloqueia atribuição implícita entre *rawphys, *virtmap, *portwire e *dmazone."""
@@ -573,8 +613,8 @@ class Sema:
         if isinstance(stmt.expr, IdentNode):
             sym = scope.lookup(stmt.expr.name)
             if sym:
-                if sym.type_node and sym.type_node.ownership not in (TK.KW_SOLE, None):
-                    ownership_str = getattr(sym.type_node.ownership, "name", str(sym.type_node.ownership))
+                if not (self._is_type_sole(sym.type_node) or getattr(sym, "is_sole", False)):
+                    ownership_str = getattr(sym.type_node.ownership, "name", str(sym.type_node.ownership)) if sym.type_node else "copyable"
                     self._err(
                         f"'handover' só pode ser aplicado a variáveis 'sole', "
                         f"mas '{stmt.expr.name}' é '{ownership_str}'",
@@ -632,7 +672,7 @@ class Sema:
                 sym = scope.lookup(expr.name)
                 if sym and getattr(sym, "is_moved", False):
                     self._err(
-                        f"uso inválido de recurso 'sole' '{expr.name}' após transferência (handover/move)",
+                        f"uso inválido de recurso 'sole' '{expr.name}' após transferência (handover)",
                         expr.span
                     )
         elif isinstance(expr, BinaryExprNode):
@@ -647,6 +687,14 @@ class Sema:
             self._check_expr(expr.callee, scope)
             for arg in expr.args:
                 self._check_expr(arg.value, scope)
+                if isinstance(arg.value, IdentNode):
+                    arg_sym = scope.lookup(arg.value.name)
+                    if arg_sym and (self._is_type_sole(arg_sym.type_node) or getattr(arg_sym, "is_sole", False)):
+                        arg_sym.is_moved = True
+        elif isinstance(expr, (SpanOfNode, StrideOfNode, AlignOfNode)):
+            self._check_type(expr.target_type, expr.span, scope)
+        elif isinstance(expr, FieldOffsetNode):
+            pass
         elif isinstance(expr, (IndexExprNode,)):
             self._check_expr(expr.base, scope)
             self._check_expr(expr.index, scope)

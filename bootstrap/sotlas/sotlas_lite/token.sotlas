@@ -13,7 +13,7 @@ pub enum TokenKind {
 @repr(C)
 pub struct Token {
     kind: TokenKind;
-    text: [u8; 64];
+    text: [u8; 256];
     line: u32;
     col: u32;
 }

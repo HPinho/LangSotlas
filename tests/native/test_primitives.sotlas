@@ -1,0 +1,102 @@
+module test::native::primitives;
+
+struct Point {
+    x: i32,
+    y: i32
+}
+
+pub fn add_points(p1: Point, p2: Point) -> Point {
+    let mut res: Point = 0;
+    res.x = p1.x + p2.x;
+    res.y = p1.y + p2.y;
+    return res;
+}
+
+pub fn test_integers_and_arithmetic() -> bool {
+    let a: i32 = 42;
+    let b: i32 = 58;
+    let sum: i32 = a + b;
+    probe sum == 100, "sum of 42 + 58 must equal 100";
+
+    let diff: i32 = b - a;
+    probe diff == 16, "diff 58 - 42 must equal 16";
+
+    let mul: i64 = (a as i64) * (b as i64);
+    probe mul == 2436, "mul must equal 2436";
+
+    let div: i32 = b / a;
+    probe div == 1, "integer division must equal 1";
+
+    let rem: i32 = b % a;
+    probe rem == 16, "modulo must equal 16";
+
+    return true;
+}
+
+pub fn test_bitwise_operations() -> bool {
+    let flags: u32 = 0b10101010;
+    let mask: u32 = 0b00001111;
+
+    let and_res: u32 = flags & mask;
+    probe and_res == 0b00001010, "bitwise AND must mask low nibble";
+
+    let or_res: u32 = flags | mask;
+    probe or_res == 0b10101111, "bitwise OR must combine bits";
+
+    let xor_res: u32 = flags ^ mask;
+    probe xor_res == 0b10100101, "bitwise XOR must flip low bits";
+
+    let shl_res: u32 = 1 << 8;
+    probe shl_res == 256, "1 << 8 must equal 256";
+
+    let shr_res: u32 = 256 >> 4;
+    probe shr_res == 16, "256 >> 4 must equal 16";
+
+    return true;
+}
+
+pub fn test_loop_and_control_flow() -> bool {
+    let mut counter: i32 = 0;
+    let mut total: i32 = 0;
+
+    while counter < 20 {
+        counter = counter + 1;
+        if counter % 2 == 0 {
+            // Skip even numbers using continue
+            continue;
+        }
+        if counter > 15 {
+            // Exit early using break
+            break;
+        }
+        total = total + counter;
+    }
+
+    // Odd numbers < 15: 1 + 3 + 5 + 7 + 9 + 11 + 13 + 15 = 64
+    probe total == 64, "loop total of odd numbers up to 15 must equal 64";
+    return true;
+}
+
+pub fn test_struct_manipulation() -> bool {
+    let mut p1: Point = 0;
+    p1.x = 15;
+    p1.y = 25;
+
+    let mut p2: Point = 0;
+    p2.x = 35;
+    p2.y = 45;
+
+    let p3: Point = add_points(p1, p2);
+    probe p3.x == 50, "p3.x must equal 50";
+    probe p3.y == 70, "p3.y must equal 70";
+
+    return true;
+}
+
+pub fn main() -> i32 {
+    probe test_integers_and_arithmetic(), "integers and arithmetic test passed";
+    probe test_bitwise_operations(), "bitwise operations test passed";
+    probe test_loop_and_control_flow(), "control flow and loops test passed";
+    probe test_struct_manipulation(), "struct manipulation test passed";
+    return 0;
+}

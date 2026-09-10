@@ -1,0 +1,24 @@
+module test::generics_native;
+
+pub struct Pair forge<A, B> {
+    pub first: A;
+    pub second: B;
+}
+
+pub fn make_pair(a: u32, b: i64) -> Pair forge<u32, i64> {
+    let mut p: Pair forge<u32, i64> = 0;
+    p.first = a as u64;
+    p.second = b;
+    return p;
+}
+
+pub fn main() -> i32 {
+    let p: Pair forge<u32, i64> = make_pair(42, 100);
+    if p.first != 42 {
+        return 1;
+    }
+    if p.second != 100 {
+        return 2;
+    }
+    return 0;
+}

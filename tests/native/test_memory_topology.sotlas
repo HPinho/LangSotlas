@@ -1,0 +1,64 @@
+module test::native::memory_topology;
+
+pub fn test_notch_bit_access() -> bool {
+    // 0b101001 = 41 (bits: 0: 1, 1: 0, 2: 0, 3: 1, 4: 0, 5: 1)
+    let val: u32 = 41;
+
+    probe val.notch[0] == 1, "bit 0 must be 1";
+    probe val.notch[1] == 0, "bit 1 must be 0";
+    probe val.notch[2] == 0, "bit 2 must be 0";
+    probe val.notch[3] == 1, "bit 3 must be 1";
+    probe val.notch[4] == 0, "bit 4 must be 0";
+    probe val.notch[5] == 1, "bit 5 must be 1";
+
+    return true;
+}
+
+pub fn test_slit_bitfield_slices() -> bool {
+    // 0xABCD1234
+    // bits 0..7 = 0x34 = 52
+    // bits 8..15 = 0x12 = 18
+    let val: u64 = 0xABCD1234;
+
+    let lo_byte: u64 = val.slit[0..7];
+    probe lo_byte == 0x34, "slit 0..7 must equal 0x34";
+
+    let next_byte: u64 = val.slit[8..15];
+    probe next_byte == 0x12, "slit 8..15 must equal 0x12";
+
+    return true;
+}
+
+pub fn test_strand_endian_swap() -> bool {
+    let original: u64 = 0x0102030405060708;
+    let swapped: u64 = original.strand;
+    probe swapped == 0x0807060504030201, "strand must invert byte order";
+
+    let double_swapped: u64 = swapped.strand;
+    probe double_swapped == original, "double strand must restore original value";
+
+    return true;
+}
+
+pub fn test_topology_pointers() -> bool {
+    let mut storage: u32 = 0xCAFEBABE;
+    let ptr: *rawphys u32 = &mut storage as *rawphys u32;
+
+    pulse;
+    let read_val: u32 = *ptr;
+    probe read_val == 0xCAFEBABE, "rawphys pointer read must equal original storage";
+
+    *ptr = 0x12345678;
+    pulse;
+    probe storage == 0x12345678, "rawphys pointer write must update memory";
+
+    return true;
+}
+
+pub fn main() -> i32 {
+    probe test_notch_bit_access(), "notch bit access passed";
+    probe test_slit_bitfield_slices(), "slit bitfield slices passed";
+    probe test_strand_endian_swap(), "strand endian swap passed";
+    probe test_topology_pointers(), "topology pointers passed";
+    return 0;
+}
